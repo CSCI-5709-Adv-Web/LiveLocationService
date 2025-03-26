@@ -20,7 +20,11 @@ router.get("/:id", getTrip, (req, res) => {
 
 // Create a new trip
 router.post("/", async (req, res) => {
+  // Generate a trip ID if not provided
+  const tripId = req.body.id || `T${Math.floor(Math.random() * 100000)}`
+
   const trip = new Trip({
+    id: tripId, // Use the generated or provided ID
     driverId: req.body.driverId,
     customerId: req.body.customerId,
     pickupLocation: req.body.pickupLocation,
@@ -53,8 +57,15 @@ router.patch("/:id", getTrip, async (req, res) => {
 async function getTrip(req, res, next) {
   let trip
   try {
-    trip = await Trip.findById(req.params.id)
-    if (trip == null) {
+    // First try to find by the id field
+    trip = await Trip.findOne({ id: req.params.id })
+
+    // If not found, try by MongoDB _id as fallback
+    if (!trip) {
+      trip = await Trip.findById(req.params.id)
+    }
+
+    if (!trip) {
       return res.status(404).json({ message: "Trip not found" })
     }
   } catch (err) {

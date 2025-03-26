@@ -1,13 +1,24 @@
-// Map to store active connections
+// At the beginning of the file, add a variable to track Kafka status
 const activeDrivers = new Map()
 const activeCustomers = new Map()
 const tripSubscriptions = new Map()
 // Store the latest driver locations
 const driverLocations = new Map()
+// Track if Kafka is enabled
+let isKafkaEnabled = false
 
 export const handleSocketConnections = (io, kafkaProducer) => {
+  // Set Kafka status based on the producer
+  isKafkaEnabled = kafkaProducer !== null && typeof kafkaProducer === "object"
+  console.log(`Socket handler initialized with Kafka ${isKafkaEnabled ? "enabled" : "disabled"}`)
+
   io.on("connection", (socket) => {
     console.log("New client connected:", socket.id)
+
+    // Send server configuration to the client immediately after connection
+    socket.emit("serverConfig", {
+      kafkaEnabled: isKafkaEnabled,
+    })
 
     // Driver connected
     socket.on("driverConnected", (data) => {
@@ -19,6 +30,11 @@ export const handleSocketConnections = (io, kafkaProducer) => {
         socket.join(`trip:${data.tripId}`)
         console.log(`Driver joined room: trip:${data.tripId}`)
       }
+
+      // Send server configuration again to ensure driver has it
+      socket.emit("serverConfig", {
+        kafkaEnabled: isKafkaEnabled,
+      })
     })
 
     // Customer connected
@@ -38,6 +54,7 @@ export const handleSocketConnections = (io, kafkaProducer) => {
           socket.emit("driverLocationUpdate", {
             tripId: data.tripId,
             location: latestLocation,
+            source: "cache", // Add source for debugging
           })
         } else {
           console.log("No driver location available for requested trip")
@@ -61,6 +78,7 @@ export const handleSocketConnections = (io, kafkaProducer) => {
         socket.emit("driverLocationUpdate", {
           tripId: data.tripId,
           location: latestLocation,
+          source: "cache", // Add source for debugging
         })
       } else {
         console.log("No driver location available for requested trip")
@@ -85,40 +103,64 @@ export const handleSocketConnections = (io, kafkaProducer) => {
       // Store the latest location
       driverLocations.set(data.tripId, data.location)
 
-      // Broadcast to all clients in this trip's room
+      // If Kafka is enabled, send to Kafka
+      if (kafkaProducer) {
+        try {
+          const sent = await kafkaProducer.sendLocationUpdate(data.tripId, data.location)
+          if (sent) {
+            console.log("Location update sent to Kafka successfully")
+            // Don't emit via socket.io directly, let the Kafka consumer handle it
+            return
+          } else {
+            console.warn("Failed to send to Kafka, falling back to Socket.io")
+          }
+        } catch (error) {
+          console.error("Error sending to Kafka, falling back to Socket.io:", error)
+        }
+      }
+
+      // If Kafka is disabled or failed, broadcast directly via Socket.io
       io.to(`trip:${data.tripId}`).emit("driverLocationUpdate", {
         tripId: data.tripId,
         location: data.location,
+        source: "socket", // Add source for debugging
       })
-
-      // Also send to Kafka if available
-      if (kafkaProducer) {
-        try {
-          await kafkaProducer.sendLocationUpdate(data.tripId, data.location)
-        } catch (error) {
-          console.error("Error sending to Kafka:", error)
-        }
-      }
     })
 
     // Trip status update
     socket.on("tripStatusUpdate", async (data) => {
       console.log("Trip status update:", data.tripId, data.status)
 
-      // Broadcast to all clients in this trip's room
+      // If Kafka is enabled, send to Kafka
+      if (kafkaProducer) {
+        try {
+          const sent = await kafkaProducer.sendTripStatusUpdate(data.tripId, data.status)
+          if (sent) {
+            console.log("Status update sent to Kafka successfully")
+            // Don't emit via socket.io directly, let the Kafka consumer handle it
+            return
+          } else {
+            console.warn("Failed to send to Kafka, falling back to Socket.io")
+          }
+        } catch (error) {
+          console.error("Error sending to Kafka, falling back to Socket.io:", error)
+        }
+      }
+
+      // If Kafka is disabled or failed, broadcast directly via Socket.io
       io.to(`trip:${data.tripId}`).emit("tripStatusUpdate", {
         tripId: data.tripId,
         status: data.status,
+        source: "socket", // Add source for debugging
       })
+    })
 
-      // Also send to Kafka if available
-      if (kafkaProducer) {
-        try {
-          await kafkaProducer.sendTripStatusUpdate(data.tripId, data.status)
-        } catch (error) {
-          console.error("Error sending to Kafka:", error)
-        }
-      }
+    // Add a handler for getServerConfig event
+    socket.on("getServerConfig", () => {
+      console.log("Client requested server configuration")
+      socket.emit("serverConfig", {
+        kafkaEnabled: isKafkaEnabled,
+      })
     })
 
     // Disconnect event

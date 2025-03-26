@@ -9,19 +9,19 @@ import "../../styles/Customer.css"
 // Fixed locations that won't change
 const FIXED_LOCATIONS = {
   pickup: {
-    lat: 44.6488,
-    lng: -63.5752,
-    address: "1333 South Park St, Halifax, NS B3J 2K9",
+    lat: 44.6509,
+    lng: -63.5926,
+    address: "2390 Robie St, Halifax, NS B3K 4M7",
   },
   dropoff: {
-    lat: 44.6426,
-    lng: -63.5773,
-    address: "5410 Spring Garden Rd, Halifax, NS B3J 1E9",
+    lat: 44.6513,
+    lng: -63.5902,
+    address: "5839 Cunard St Unit 608, Halifax, NS B3K 0B9",
   },
 }
 
-// Use the port from environment variable
-const PORT = process.env.PORT
+// Use the port from environment variable or default to 5000
+const PORT = process.env.PORT || 5001
 // Use the socket URL from environment variable or default to localhost
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || `http://localhost:${PORT}`
 // Create socket outside component to prevent recreation on re-renders
@@ -47,6 +47,8 @@ const CustomerApp = () => {
     estimatedDeliveryTime: "30 minutes",
   })
   const [socketConnected, setSocketConnected] = useState(false)
+  const [kafkaEnabled, setKafkaEnabled] = useState(false)
+  const [locationSource, setLocationSource] = useState("socket")
 
   // Connect to socket - only set up listeners once
   useEffect(() => {
@@ -62,6 +64,9 @@ const CustomerApp = () => {
       // Request the latest driver location
       console.log("Requesting initial driver location")
       socket.emit("requestDriverLocation", { tripId: trip.id })
+
+      // Request server configuration
+      socket.emit("getServerConfig")
     }
 
     const handleConnectError = (error) => {
@@ -83,6 +88,14 @@ const CustomerApp = () => {
           `lat: ${data.location.lat.toFixed(7)}, lng: ${data.location.lng.toFixed(7)}`,
         )
         setDriverLocation(data.location)
+
+        // Track the source of the location update
+        if (data.source) {
+          setLocationSource(data.source)
+          if (data.source === "kafka") {
+            setKafkaEnabled(true)
+          }
+        }
       } else {
         console.error("Received invalid driver location data:", data)
       }
@@ -93,6 +106,19 @@ const CustomerApp = () => {
       if (data && data.status) {
         setTripStatus(data.status)
       }
+
+      // Check if the update came from Kafka
+      if (data && data.source === "kafka") {
+        setKafkaEnabled(true)
+      }
+    }
+
+    const handleServerConfig = (config) => {
+      console.log("Received server configuration:", config)
+      if (config && typeof config.kafkaEnabled === "boolean") {
+        console.log("Setting Kafka enabled to:", config.kafkaEnabled)
+        setKafkaEnabled(config.kafkaEnabled)
+      }
     }
 
     // Add event listeners
@@ -101,6 +127,7 @@ const CustomerApp = () => {
     socket.on("disconnect", handleDisconnect)
     socket.on("driverLocationUpdate", handleDriverLocationUpdate)
     socket.on("tripStatusUpdate", handleTripStatusUpdate)
+    socket.on("serverConfig", handleServerConfig)
 
     // If socket is already connected, emit connection info
     if (socket.connected) {
@@ -115,6 +142,7 @@ const CustomerApp = () => {
       socket.off("disconnect", handleDisconnect)
       socket.off("driverLocationUpdate", handleDriverLocationUpdate)
       socket.off("tripStatusUpdate", handleTripStatusUpdate)
+      socket.off("serverConfig", handleServerConfig)
       // Don't disconnect the socket here
     }
   }, [trip.id])
@@ -158,6 +186,8 @@ const CustomerApp = () => {
                 <h4>Status: {tripStatus}</h4>
                 <h4>Socket Connected: {socketConnected ? "Yes" : "No"}</h4>
                 <h4>Socket ID: {socket.id || "Not connected"}</h4>
+                <h4>Kafka Enabled: {kafkaEnabled ? "Yes" : "No"}</h4>
+                <h4>Location Source: {locationSource}</h4>
               </div>
             </div>
           )}

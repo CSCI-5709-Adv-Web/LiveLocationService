@@ -1,19 +1,28 @@
 import { Kafka } from "kafkajs"
+import { processLocationUpdate } from "./locationConsumer.js"
+import dotenv from "dotenv"
 
-// Kafka configuration
+// Load environment variables
+dotenv.config()
+
+// Kafka configuration from environment variables
+const KAFKA_BROKERS = process.env.KAFKA_BROKERS ? process.env.KAFKA_BROKERS.split(",") : ["localhost:9092"]
+const KAFKA_CLIENT_ID = process.env.KAFKA_CLIENT_ID || "location-tracking-service"
+
+// Kafka topics
+const LOCATION_UPDATES_TOPIC = "driver-location-updates"
+const TRIP_STATUS_TOPIC = "trip-status-updates"
+
+// Create Kafka instance
 const kafka = new Kafka({
-  clientId: "location-tracking-service",
-  brokers: ["localhost:9092"], // Update with your Kafka broker addresses
+  clientId: KAFKA_CLIENT_ID,
+  brokers: KAFKA_BROKERS,
   connectionTimeout: 10000, // Increase connection timeout
   retry: {
     initialRetryTime: 300,
     retries: 10, // Increase number of retries
   },
 })
-
-// Kafka topics
-const LOCATION_UPDATES_TOPIC = "driver-location-updates"
-const TRIP_STATUS_TOPIC = "trip-status-updates"
 
 // Setup Kafka producer
 export const setupKafkaProducer = () => {
@@ -63,11 +72,17 @@ export const setupKafkaProducer = () => {
     }
   }
 
+  // Connect immediately
   connect()
 
   // Function to send location updates to Kafka
   const sendLocationUpdate = async (tripId, location) => {
     try {
+      if (!producer || !producer.isConnected) {
+        console.warn("Kafka producer not connected, reconnecting...")
+        await connect()
+      }
+
       await producer.send({
         topic: LOCATION_UPDATES_TOPIC,
         messages: [
@@ -82,15 +97,21 @@ export const setupKafkaProducer = () => {
         ],
       })
       console.log(`Location update for trip ${tripId} sent to Kafka`)
+      return true
     } catch (error) {
       console.error("Error sending location update to Kafka:", error)
-      throw error
+      return false
     }
   }
 
   // Function to send trip status updates to Kafka
   const sendTripStatusUpdate = async (tripId, status) => {
     try {
+      if (!producer || !producer.isConnected) {
+        console.warn("Kafka producer not connected, reconnecting...")
+        await connect()
+      }
+
       await producer.send({
         topic: TRIP_STATUS_TOPIC,
         messages: [
@@ -105,15 +126,17 @@ export const setupKafkaProducer = () => {
         ],
       })
       console.log(`Status update for trip ${tripId} sent to Kafka`)
+      return true
     } catch (error) {
       console.error("Error sending status update to Kafka:", error)
-      throw error
+      return false
     }
   }
 
   return {
     sendLocationUpdate,
     sendTripStatusUpdate,
+    isConnected: () => producer && producer.isConnected,
   }
 }
 
@@ -136,23 +159,34 @@ export const setupKafkaConsumer = (io) => {
             const messageValue = JSON.parse(message.value.toString())
 
             if (topic === LOCATION_UPDATES_TOPIC) {
-              const { tripId, location } = messageValue
-              console.log(`Received location update for trip ${tripId} from Kafka`)
+              const { tripId, location, timestamp } = messageValue
+              console.log(`Received location update for trip ${tripId} from Kafka:`, location)
+
+              // Store the location update in the database
+              await processLocationUpdate(tripId, location, timestamp)
 
               // Forward to all clients subscribed to this trip via Socket.io
-              io.to(`trip:${tripId}`).emit("driverLocationUpdate", {
-                tripId,
-                location,
-              })
+              if (io) {
+                io.to(`trip:${tripId}`).emit("driverLocationUpdate", {
+                  tripId,
+                  location,
+                  timestamp,
+                  source: "kafka", // Add source for debugging
+                })
+              }
             } else if (topic === TRIP_STATUS_TOPIC) {
-              const { tripId, status } = messageValue
-              console.log(`Received status update for trip ${tripId} from Kafka`)
+              const { tripId, status, timestamp } = messageValue
+              console.log(`Received status update for trip ${tripId} from Kafka:`, status)
 
               // Forward to all clients subscribed to this trip via Socket.io
-              io.to(`trip:${tripId}`).emit("tripStatusUpdate", {
-                tripId,
-                status,
-              })
+              if (io) {
+                io.to(`trip:${tripId}`).emit("tripStatusUpdate", {
+                  tripId,
+                  status,
+                  timestamp,
+                  source: "kafka", // Add source for debugging
+                })
+              }
             }
           } catch (error) {
             console.error("Error processing Kafka message:", error)
@@ -166,6 +200,7 @@ export const setupKafkaConsumer = (io) => {
     }
   }
 
+  // Connect immediately
   connect()
 
   return consumer

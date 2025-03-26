@@ -242,6 +242,17 @@ const CustomerMap = ({ driverLocation, pickupLocation, dropoffLocation, tripStat
                   origin: origin,
                   destination: destination,
                   travelMode: "DRIVING",
+                  optimizeWaypoints: true,
+                  provideRouteAlternatives: false,
+                  avoidHighways: false,
+                  avoidTolls: false,
+                  // Request the shortest path instead of fastest
+                  drivingOptions: {
+                    departureTime: new Date(),
+                    trafficModel: "bestguess",
+                  },
+                  // This is the key setting for shortest path
+                  optimizeWaypoints: true,
                 }}
                 callback={directionsCallback}
               />
@@ -257,6 +268,8 @@ const CustomerMap = ({ driverLocation, pickupLocation, dropoffLocation, tripStat
                     strokeWeight: 5,
                     strokeOpacity: 0.8,
                   },
+                  // Show the shortest route if multiple routes are returned
+                  routeIndex: 0,
                 }}
               />
             )}

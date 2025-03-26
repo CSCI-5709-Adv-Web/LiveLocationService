@@ -1,5 +1,3 @@
-import dotenv from 'dotenv';
-dotenv.config();
 import express from "express"
 import http from "http"
 import { Server } from "socket.io"
@@ -10,6 +8,10 @@ import mongoose from "mongoose"
 import tripRoutes from "./routes/trips.js"
 import { handleSocketConnections } from "./socket/socketHandler.js"
 import { setupKafkaProducer, setupKafkaConsumer } from "./kafka/kafkaSetup.js"
+import dotenv from "dotenv"
+
+// Load environment variables
+dotenv.config()
 
 // ES module fix for __dirname
 const __filename = fileURLToPath(import.meta.url)
@@ -20,7 +22,7 @@ const app = express()
 const server = http.createServer(app)
 
 // Get port from environment variable or use default
-const PORT = process.env.PORT
+const PORT = process.env.PORT || 5000
 
 // Middleware
 app.use(cors())
@@ -41,39 +43,88 @@ const io = new Server(server, {
   pingInterval: 25000, // Increase ping interval
 })
 
-// Connect to MongoDB
+// Connect to MongoDB - Fix the database name case sensitivity issue
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/location-tracker"
+
+// Ensure we're using the correct database name with consistent casing
+// Extract the database name from the connection string to check if it exists
+const dbNameMatch = MONGODB_URI.match(/\/([^/]+)(?:\?|$)/)
+const dbName = dbNameMatch ? dbNameMatch[1] : "location-tracker"
+
+console.log(`Connecting to MongoDB database: ${dbName}`)
+
 mongoose
-  .connect(process.env.MONGODB_URI, {
+  .connect(MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
   .then(() => console.log("Connected to MongoDB"))
-  .catch((err) => console.error("MongoDB connection error:", err))
+  .catch((err) => {
+    console.error("MongoDB connection error:", err)
 
+    // If the error is related to database name case sensitivity, provide a helpful message
+    if (err.code === 13297) {
+      console.error(`
+==========================================================================
+DATABASE NAME CASE SENSITIVITY ERROR DETECTED
+
+The MongoDB database name has a case sensitivity conflict.
+Error: ${err.message}
+
+Please ensure you're using the exact same database name in all connections.
+If you've previously used "CommuneDrop", make sure to use "CommuneDrop" 
+(not "communedrop") in your connection string.
+
+You can fix this by updating your MONGODB_URI environment variable to use
+the correct database name case.
+==========================================================================
+      `)
+    }
+  })
+
+// Modify the Kafka setup to ensure we properly log the status
 // Setup Kafka producer and consumer
-let kafkaProducer
+let kafkaProducer = null
+let kafkaConsumer = null
+
 try {
+  // Check if Kafka is enabled via environment variable
   const useKafka = process.env.USE_KAFKA === "true"
+  console.log(`Kafka integration ${useKafka ? "enabled" : "disabled"}`)
 
   if (useKafka) {
+    // Initialize Kafka producer
     kafkaProducer = setupKafkaProducer()
-    const kafkaConsumer = setupKafkaConsumer(io)
-    console.log("Kafka integration initialized")
+
+    // Initialize Kafka consumer and pass the Socket.io instance
+    // so it can forward messages to connected clients
+    kafkaConsumer = setupKafkaConsumer(io)
+
+    console.log("Kafka producer and consumer initialized successfully")
+
+    // Broadcast Kafka status to all connected clients
+    setTimeout(() => {
+      io.emit("serverConfig", { kafkaEnabled: true })
+      console.log("Broadcasted Kafka enabled status to all clients")
+    }, 5000) // Wait 5 seconds to ensure Kafka is fully connected
   } else {
-    console.log("Kafka integration disabled")
-    kafkaProducer = null
+    console.log("Kafka integration disabled by configuration")
+    io.emit("serverConfig", { kafkaEnabled: false })
   }
 } catch (error) {
   console.error("Error initializing Kafka:", error)
   kafkaProducer = null
+  kafkaConsumer = null
+  io.emit("serverConfig", { kafkaEnabled: false })
 }
 
-// Handle socket connections
+// Handle socket connections - pass the Kafka producer to the socket handler
 handleSocketConnections(io, kafkaProducer)
 
 // Start server
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
+  console.log(`Kafka integration: ${process.env.USE_KAFKA === "true" ? "Enabled" : "Disabled"}`)
 })
 
 export default app

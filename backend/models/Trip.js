@@ -16,6 +16,13 @@ const locationSchema = new mongoose.Schema({
 })
 
 const tripSchema = new mongoose.Schema({
+  // Add an id field that's separate from MongoDB's _id
+  id: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
+  },
   driverId: {
     type: String,
     required: true,
@@ -60,7 +67,16 @@ tripSchema.pre("save", function (next) {
   next()
 })
 
-const Trip = mongoose.model("Trip", tripSchema)
+// Add error handling for model creation
+let Trip
+try {
+  // Check if model already exists to prevent model overwrite warnings
+  Trip = mongoose.models.Trip || mongoose.model("Trip", tripSchema)
+} catch (error) {
+  console.error("Error creating Trip model:", error)
+  // Fallback to creating the model anyway
+  Trip = mongoose.model("Trip", tripSchema)
+}
 
 export default Trip
 
