@@ -155,6 +155,44 @@ export const handleSocketConnections = (io, kafkaProducer) => {
       })
     })
 
+    // Trip accepted
+    socket.on("tripAccepted", async (data) => {
+      console.log("Trip accepted:", data.tripId, "by driver:", data.driverId)
+
+      // Join the trip room if not already joined
+      socket.join(`trip:${data.tripId}`)
+
+      // Broadcast to all clients in the trip room
+      io.to(`trip:${data.tripId}`).emit("tripStatusUpdate", {
+        tripId: data.tripId,
+        status: "pickup",
+        source: "socket",
+      })
+
+      // If Kafka is enabled, send to Kafka
+      if (kafkaProducer) {
+        try {
+          const sent = await kafkaProducer.sendTripStatusUpdate(data.tripId, "pickup")
+          if (sent) {
+            console.log("Trip acceptance sent to Kafka successfully")
+          }
+        } catch (error) {
+          console.error("Error sending trip acceptance to Kafka:", error)
+        }
+      }
+    })
+
+    // Trip rejected
+    socket.on("tripRejected", (data) => {
+      console.log("Trip rejected:", data.tripId, "by driver:", data.driverId)
+
+      // Broadcast to all clients in the trip room
+      io.to(`trip:${data.tripId}`).emit("tripRejected", {
+        tripId: data.tripId,
+        driverId: data.driverId,
+      })
+    })
+
     // Add a handler for getServerConfig event
     socket.on("getServerConfig", () => {
       console.log("Client requested server configuration")

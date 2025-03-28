@@ -14,7 +14,7 @@ const logApiUsage = (action) => {
   console.log(`[MAPS API] ${action} - ${new Date().toISOString()}`)
 }
 
-const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatus }) => {
+const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatus, mockMode }) => {
   const [directions, setDirections] = useState(null)
   const [mapsLoaded, setMapsLoaded] = useState(false)
   const [directionsRequested, setDirectionsRequested] = useState(false)
@@ -27,9 +27,26 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
   const directionsRequestTimeout = useRef(null)
   const { renderAdvancedMarker } = useAdvancedMarker()
 
+  // Use the exact coordinates from the screenshots for Halifax locations
+  const fixedPickupLocation = pickupLocation
+    ? {
+        ...pickupLocation,
+        lat: 44.6430,
+        lng: -63.5793,
+      }
+    : null
+
+  const fixedDropoffLocation = dropoffLocation
+    ? {
+        ...dropoffLocation,
+        lat: 44.6418,
+        lng: -63.5784,
+      }
+    : null
+
   // Determine which locations to show directions for based on trip status
   const origin = currentLocation
-  const destination = tripStatus === "pickup" ? pickupLocation : dropoffLocation
+  const destination = tripStatus === "pickup" ? fixedPickupLocation : fixedDropoffLocation
 
   // Default to Halifax if no current location
   const center = currentLocation || { lat: 44.6476, lng: -63.5728 }
@@ -104,12 +121,12 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
 
     const bounds = new window.google.maps.LatLngBounds()
 
-    if (pickupLocation) {
-      bounds.extend(new window.google.maps.LatLng(pickupLocation.lat, pickupLocation.lng))
+    if (fixedPickupLocation) {
+      bounds.extend(new window.google.maps.LatLng(fixedPickupLocation.lat, fixedPickupLocation.lng))
     }
 
-    if (dropoffLocation) {
-      bounds.extend(new window.google.maps.LatLng(dropoffLocation.lat, dropoffLocation.lng))
+    if (fixedDropoffLocation) {
+      bounds.extend(new window.google.maps.LatLng(fixedDropoffLocation.lat, fixedDropoffLocation.lng))
     }
 
     if (currentLocation) {
@@ -135,7 +152,7 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
         window.google.maps.event.removeListener(zoomChangeBoundsListener)
       }
     }
-  }, [mapsLoaded, currentLocation, pickupLocation, dropoffLocation, mapBounds])
+  }, [mapsLoaded, currentLocation, fixedPickupLocation, fixedDropoffLocation, mapBounds])
 
   // Helper function to compare bounds
   const boundsEqual = (bounds1, bounds2) => {
@@ -164,11 +181,11 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
     currentLocation: currentLocation
       ? `lat: ${currentLocation.lat.toFixed(7)}, lng: ${currentLocation.lng.toFixed(7)}`
       : "undefined",
-    pickupLocation: pickupLocation
-      ? `lat: ${pickupLocation.lat.toFixed(7)}, lng: ${pickupLocation.lng.toFixed(7)}`
+    pickupLocation: fixedPickupLocation
+      ? `lat: ${fixedPickupLocation.lat.toFixed(7)}, lng: ${fixedPickupLocation.lng.toFixed(7)}`
       : "undefined",
-    dropoffLocation: dropoffLocation
-      ? `lat: ${dropoffLocation.lat.toFixed(7)}, lng: ${dropoffLocation.lng.toFixed(7)}`
+    dropoffLocation: fixedDropoffLocation
+      ? `lat: ${fixedDropoffLocation.lat.toFixed(7)}, lng: ${fixedDropoffLocation.lng.toFixed(7)}`
       : "undefined",
     tripStatus,
   })
@@ -189,9 +206,9 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
               })}
 
             {/* Pickup location - Always show */}
-            {pickupLocation &&
+            {fixedPickupLocation &&
               renderAdvancedMarker({
-                position: pickupLocation,
+                position: fixedPickupLocation,
                 title: "PICKUP",
                 color: "green",
                 size: 40,
@@ -199,9 +216,9 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
               })}
 
             {/* Dropoff location - Always show */}
-            {dropoffLocation &&
+            {fixedDropoffLocation &&
               renderAdvancedMarker({
-                position: dropoffLocation,
+                position: fixedDropoffLocation,
                 title: "DROPOFF",
                 color: "red",
                 size: 40,
@@ -218,20 +235,20 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
               </InfoWindow>
             )}
 
-            {selectedMarker === "pickup" && (
-              <InfoWindow position={pickupLocation} onCloseClick={() => setSelectedMarker(null)}>
+            {selectedMarker === "pickup" && fixedPickupLocation && (
+              <InfoWindow position={fixedPickupLocation} onCloseClick={() => setSelectedMarker(null)}>
                 <div>
                   <h3>Pickup Location</h3>
-                  <p>{pickupLocation.address}</p>
+                  <p>{fixedPickupLocation.address}</p>
                 </div>
               </InfoWindow>
             )}
 
-            {selectedMarker === "dropoff" && (
-              <InfoWindow position={dropoffLocation} onCloseClick={() => setSelectedMarker(null)}>
+            {selectedMarker === "dropoff" && fixedDropoffLocation && (
+              <InfoWindow position={fixedDropoffLocation} onCloseClick={() => setSelectedMarker(null)}>
                 <div>
                   <h3>Dropoff Location</h3>
-                  <p>{dropoffLocation.address}</p>
+                  <p>{fixedDropoffLocation.address}</p>
                 </div>
               </InfoWindow>
             )}

@@ -44,7 +44,7 @@ const io = new Server(server, {
 })
 
 // Connect to MongoDB - Fix the database name case sensitivity issue
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/location-tracker"
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://Web_Project:yI2PgSA5kN7SZCXJ@web-term-project.0xq4w.mongodb.net/CommuneDrop?retryWrites=true&w=majority&appName=Web-Term-Project"
 
 // Ensure we're using the correct database name with consistent casing
 // Extract the database name from the connection string to check if it exists

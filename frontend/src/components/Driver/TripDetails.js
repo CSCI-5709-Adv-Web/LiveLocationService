@@ -1,10 +1,9 @@
 "use client"
+import { User, Package, MapPin, Clock, DollarSign } from "lucide-react"
 
 const TripDetails = ({ trip, tripStatus, onUpdateStatus }) => {
   const renderActionButton = () => {
     switch (tripStatus) {
-      case "waiting":
-        return null
       case "pickup":
         return (
           <button className="action-button pickup-button" onClick={() => onUpdateStatus("delivering")}>
@@ -18,42 +17,66 @@ const TripDetails = ({ trip, tripStatus, onUpdateStatus }) => {
           </button>
         )
       case "completed":
-        return (
-          <button className="action-button completed-button" disabled>
-            Delivery Completed
-          </button>
-        )
+        return <div className="completed-message">Delivery Completed</div>
       default:
         return null
     }
   }
 
-  // Remove the waiting condition to always show trip details
   return (
-    <div className="trip-details">
-      <h2>Trip #{trip.id}</h2>
-
-      <div className="detail-section">
-        <h3>Customer</h3>
-        <p>{trip.customerName}</p>
+    <div className="trip-details-card">
+      <div className="trip-header">
+        <h2>Trip #{trip.id}</h2>
+        <span className={`trip-status-badge ${tripStatus}`}>
+          {tripStatus.charAt(0).toUpperCase() + tripStatus.slice(1)}
+        </span>
       </div>
 
-      <div className="detail-section">
-        <h3>Package</h3>
-        <p>{trip.packageDetails}</p>
+      <div className="trip-detail">
+        <User size={18} />
+        <div className="detail-content">
+          <h3>Customer</h3>
+          <p>{trip.customerName}</p>
+        </div>
       </div>
 
-      <div className="detail-section">
-        <h3>Pickup Location</h3>
-        <p>{trip.pickupLocation.address}</p>
+      <div className="trip-detail">
+        <Package size={18} />
+        <div className="detail-content">
+          <h3>Package Details</h3>
+          <p>{trip.packageDetails}</p>
+        </div>
       </div>
 
-      <div className="detail-section">
-        <h3>Dropoff Location</h3>
-        <p>{trip.dropoffLocation.address}</p>
+      <div className="trip-detail">
+        <MapPin size={18} />
+        <div className="detail-content">
+          <h3>Pickup Location</h3>
+          <p>{trip.pickupLocation.address}</p>
+        </div>
       </div>
 
-      <div className="action-section">{renderActionButton()}</div>
+      <div className="trip-detail">
+        <MapPin size={18} />
+        <div className="detail-content">
+          <h3>Dropoff Location</h3>
+          <p>{trip.dropoffLocation.address}</p>
+        </div>
+      </div>
+
+      <div className="trip-footer">
+        <div className="trip-price">
+          <DollarSign size={18} />
+          <span>${trip.price.toFixed(2)}</span>
+        </div>
+
+        <div className="trip-eta">
+          <Clock size={18} />
+          <span>Est. {trip.estimatedTime}</span>
+        </div>
+      </div>
+
+      <div className="trip-actions">{renderActionButton()}</div>
     </div>
   )
 }

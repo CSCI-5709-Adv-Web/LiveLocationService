@@ -9,19 +9,19 @@ import "../../styles/Customer.css"
 // Fixed locations that won't change
 const FIXED_LOCATIONS = {
   pickup: {
-    lat: 44.6509,
-    lng: -63.5926,
-    address: "2390 Robie St, Halifax, NS B3K 4M7",
+    lat: 44.6430,
+    lng: -63.5793,
+    address: "5683 Spring Garden Rd, Halifax, NS B3J 1G9",
   },
   dropoff: {
-    lat: 44.6513,
-    lng: -63.5902,
-    address: "5839 Cunard St Unit 608, Halifax, NS B3K 0B9",
+    lat: 44.6418,
+    lng: -63.5784,
+    address: "1456 Brenton St, Halifax, NS B3J 2K7",
   },
 }
 
 // Use the port from environment variable or default to 5000
-const PORT = process.env.PORT || 5001
+const PORT = process.env.PORT || 5000
 // Use the socket URL from environment variable or default to localhost
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || `http://localhost:${PORT}`
 // Create socket outside component to prevent recreation on re-renders
@@ -37,14 +37,14 @@ const CustomerApp = () => {
   const [driverLocation, setDriverLocation] = useState({ lat: 44.647, lng: -63.5942 })
   const [tripStatus, setTripStatus] = useState("assigned") // assigned, pickup, delivering, completed
   const [trip, setTrip] = useState({
-    id: "T12345",
+    id: "T7258", // Changed to match driver's trip ID
     // Use the fixed locations
     pickupLocation: FIXED_LOCATIONS.pickup,
     dropoffLocation: FIXED_LOCATIONS.dropoff,
     driverName: "Jane Smith",
     driverPhone: "(555) 123-4567",
-    packageDetails: "Small package, handle with care",
-    estimatedDeliveryTime: "30 minutes",
+    packageDetails: "Medium-sized package, fragile",
+    estimatedDeliveryTime: "15 minutes",
   })
   const [socketConnected, setSocketConnected] = useState(false)
   const [kafkaEnabled, setKafkaEnabled] = useState(false)
