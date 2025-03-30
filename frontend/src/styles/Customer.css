@@ -162,6 +162,18 @@
   padding-left: 20px;
 }
 
+/* Add loading message styles */
+.loading-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #666;
+  font-size: 1.2rem;
+  text-align: center;
+  padding: 2rem;
+}
+
 @media (max-width: 768px) {
   .customer-content {
     flex-direction: column;
@@ -175,4 +187,3 @@
     height: 40%;
   }
 }
-

@@ -37,14 +37,21 @@ const io = new Server(server, {
   cors: {
     origin: process.env.SOCKET_CORS_ORIGIN || "*", // Use environment variable or allow all origins
     methods: ["GET", "POST"],
-    credentials: true,
+    credentials: false, // Changed to false for simpler CORS handling
+    allowedHeaders: ["*"],
   },
   pingTimeout: 60000, // Increase ping timeout
   pingInterval: 25000, // Increase ping interval
+  transports: ["websocket", "polling"], // Support both transport methods
 })
 
+// Add this for debugging
+console.log(`Socket.io server configured with CORS origin: ${process.env.SOCKET_CORS_ORIGIN || "*"}`)
+
 // Connect to MongoDB - Fix the database name case sensitivity issue
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://Web_Project:yI2PgSA5kN7SZCXJ@web-term-project.0xq4w.mongodb.net/CommuneDrop?retryWrites=true&w=majority&appName=Web-Term-Project"
+const MONGODB_URI =
+  process.env.MONGODB_URI ||
+  "mongodb+srv://Web_Project:yI2PgSA5kN7SZCXJ@web-term-project.0xq4w.mongodb.net/CommuneDrop?retryWrites=true&w=majority&appName=Web-Term-Project"
 
 // Ensure we're using the correct database name with consistent casing
 // Extract the database name from the connection string to check if it exists
@@ -96,6 +103,9 @@ try {
     // Initialize Kafka producer
     kafkaProducer = setupKafkaProducer()
 
+    // Initialize Socket.io handler first to get the broadcast function
+    const socketHandler = handleSocketConnections(io, kafkaProducer)
+
     // Initialize Kafka consumer and pass the Socket.io instance
     // so it can forward messages to connected clients
     kafkaConsumer = setupKafkaConsumer(io)
@@ -109,17 +119,18 @@ try {
     }, 5000) // Wait 5 seconds to ensure Kafka is fully connected
   } else {
     console.log("Kafka integration disabled by configuration")
+    // Initialize Socket.io handler
+    handleSocketConnections(io, kafkaProducer)
     io.emit("serverConfig", { kafkaEnabled: false })
   }
 } catch (error) {
   console.error("Error initializing Kafka:", error)
   kafkaProducer = null
   kafkaConsumer = null
+  // Initialize Socket.io handler even if Kafka fails
+  handleSocketConnections(io, null)
   io.emit("serverConfig", { kafkaEnabled: false })
 }
-
-// Handle socket connections - pass the Kafka producer to the socket handler
-handleSocketConnections(io, kafkaProducer)
 
 // Start server
 server.listen(PORT, () => {

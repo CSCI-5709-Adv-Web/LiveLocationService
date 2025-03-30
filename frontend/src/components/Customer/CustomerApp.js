@@ -6,20 +6,6 @@ import CustomerMap from "./CustomerMap"
 import DeliveryStatus from "./DeliveryStatus"
 import "../../styles/Customer.css"
 
-// Fixed locations that won't change
-const FIXED_LOCATIONS = {
-  pickup: {
-    lat: 44.6430,
-    lng: -63.5793,
-    address: "5683 Spring Garden Rd, Halifax, NS B3J 1G9",
-  },
-  dropoff: {
-    lat: 44.6418,
-    lng: -63.5784,
-    address: "1456 Brenton St, Halifax, NS B3J 2K7",
-  },
-}
-
 // Use the port from environment variable or default to 5000
 const PORT = process.env.PORT || 5000
 // Use the socket URL from environment variable or default to localhost
@@ -30,22 +16,18 @@ const socket = io(SOCKET_URL, {
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
   timeout: 20000,
+  transports: ["websocket", "polling"], // Try websocket first, then fall back to polling
+  withCredentials: false, // Disable credentials for simpler CORS handling
 })
+
+// Add this for debugging socket connection issues
+console.log(`Attempting to connect to Socket.io server at: ${SOCKET_URL}`)
 
 const CustomerApp = () => {
   // Initialize with a default driver location in Halifax
-  const [driverLocation, setDriverLocation] = useState({ lat: 44.647, lng: -63.5942 })
-  const [tripStatus, setTripStatus] = useState("assigned") // assigned, pickup, delivering, completed
-  const [trip, setTrip] = useState({
-    id: "T7258", // Changed to match driver's trip ID
-    // Use the fixed locations
-    pickupLocation: FIXED_LOCATIONS.pickup,
-    dropoffLocation: FIXED_LOCATIONS.dropoff,
-    driverName: "Jane Smith",
-    driverPhone: "(555) 123-4567",
-    packageDetails: "Medium-sized package, fragile",
-    estimatedDeliveryTime: "15 minutes",
-  })
+  const [driverLocation, setDriverLocation] = useState(null)
+  const [tripStatus, setTripStatus] = useState("waiting") // Start with waiting until we get real data
+  const [trip, setTrip] = useState(null)
   const [socketConnected, setSocketConnected] = useState(false)
   const [kafkaEnabled, setKafkaEnabled] = useState(false)
   const [locationSource, setLocationSource] = useState("socket")
@@ -59,11 +41,25 @@ const CustomerApp = () => {
       console.log("Customer connected to server with socket ID:", socket.id)
       setSocketConnected(true)
 
-      socket.emit("customerConnected", { customerId: "C001", tripId: trip.id })
+      // Get customer ID from URL or localStorage, or use a default
+      const customerId =
+        new URLSearchParams(window.location.search).get("customerId") || localStorage.getItem("customerId") || "C001"
 
-      // Request the latest driver location
-      console.log("Requesting initial driver location")
-      socket.emit("requestDriverLocation", { tripId: trip.id })
+      // Get trip ID from URL or localStorage, or use a default
+      const tripId = new URLSearchParams(window.location.search).get("tripId") || localStorage.getItem("tripId")
+
+      if (tripId) {
+        socket.emit("customerConnected", { customerId, tripId })
+
+        // Request trip data
+        socket.emit("getTripDetails", { tripId })
+
+        // Request the latest driver location
+        console.log("Requesting initial driver location")
+        socket.emit("requestDriverLocation", { tripId })
+      } else {
+        console.error("No trip ID available")
+      }
 
       // Request server configuration
       socket.emit("getServerConfig")
@@ -121,6 +117,14 @@ const CustomerApp = () => {
       }
     }
 
+    const handleTripDetails = (tripData) => {
+      console.log("Received trip details:", tripData)
+      if (tripData) {
+        setTrip(tripData)
+        setTripStatus(tripData.status || "assigned")
+      }
+    }
+
     // Add event listeners
     socket.on("connect", handleConnect)
     socket.on("connect_error", handleConnectError)
@@ -128,6 +132,7 @@ const CustomerApp = () => {
     socket.on("driverLocationUpdate", handleDriverLocationUpdate)
     socket.on("tripStatusUpdate", handleTripStatusUpdate)
     socket.on("serverConfig", handleServerConfig)
+    socket.on("tripDetails", handleTripDetails)
 
     // If socket is already connected, emit connection info
     if (socket.connected) {
@@ -143,13 +148,14 @@ const CustomerApp = () => {
       socket.off("driverLocationUpdate", handleDriverLocationUpdate)
       socket.off("tripStatusUpdate", handleTripStatusUpdate)
       socket.off("serverConfig", handleServerConfig)
+      socket.off("tripDetails", handleTripDetails)
       // Don't disconnect the socket here
     }
-  }, [trip.id])
+  }, [])
 
   // Periodically request driver location updates when socket is connected
   useEffect(() => {
-    if (!socketConnected) return
+    if (!socketConnected || !trip?.id) return
 
     console.log("Setting up periodic location requests")
 
@@ -159,30 +165,40 @@ const CustomerApp = () => {
     }, 3000) // Every 3 seconds
 
     return () => clearInterval(intervalId)
-  }, [trip.id, socketConnected])
+  }, [trip?.id, socketConnected])
 
   return (
     <div className="customer-app">
       <header className="customer-header">
         <h1>Package Delivery Tracker</h1>
-        <div className="trip-id">Trip #{trip.id}</div>
+        {trip && <div className="trip-id">Trip #{trip.id}</div>}
       </header>
 
       <div className="customer-content">
         <div className="map-container">
-          <CustomerMap
-            driverLocation={driverLocation}
-            pickupLocation={FIXED_LOCATIONS.pickup}
-            dropoffLocation={FIXED_LOCATIONS.dropoff}
-            tripStatus={tripStatus}
-          />
+          {trip ? (
+            <CustomerMap
+              driverLocation={driverLocation}
+              pickupLocation={trip.pickupLocation}
+              dropoffLocation={trip.dropoffLocation}
+              tripStatus={tripStatus}
+            />
+          ) : (
+            <div className="loading-message">
+              <p>Loading trip data...</p>
+            </div>
+          )}
 
           {/* Debug info - only visible in development */}
           {process.env.NODE_ENV === "development" && (
             <div className="debug-panel">
               <div className="debug-info">
                 <h4>Driver Location:</h4>
-                <p>{`{"lat":${driverLocation.lat.toFixed(7)},"lng":${driverLocation.lng.toFixed(7)}}`}</p>
+                <p>
+                  {driverLocation
+                    ? `{"lat":${driverLocation.lat.toFixed(7)},"lng":${driverLocation.lng.toFixed(7)}}`
+                    : "Not available"}
+                </p>
                 <h4>Status: {tripStatus}</h4>
                 <h4>Socket Connected: {socketConnected ? "Yes" : "No"}</h4>
                 <h4>Socket ID: {socket.id || "Not connected"}</h4>
@@ -194,16 +210,13 @@ const CustomerApp = () => {
         </div>
 
         <div className="status-container">
-          <DeliveryStatus
-            trip={{
-              ...trip,
-              // Ensure we always use the fixed locations
-              pickupLocation: FIXED_LOCATIONS.pickup,
-              dropoffLocation: FIXED_LOCATIONS.dropoff,
-            }}
-            tripStatus={tripStatus}
-            driverLocation={driverLocation}
-          />
+          {trip ? (
+            <DeliveryStatus trip={trip} tripStatus={tripStatus} driverLocation={driverLocation} />
+          ) : (
+            <div className="loading-message">
+              <p>Loading trip data...</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

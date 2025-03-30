@@ -1,8 +1,16 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from "react"
-import { GoogleMap, LoadScript, DirectionsService, DirectionsRenderer, InfoWindow } from "@react-google-maps/api"
+import {
+  GoogleMap,
+  LoadScript,
+  DirectionsService,
+  DirectionsRenderer,
+  InfoWindow,
+  Marker,
+} from "@react-google-maps/api"
 import { useAdvancedMarker } from "../Customer/useAdvancedMarker"
+import { Loader } from "lucide-react"
 
 const mapContainerStyle = {
   width: "100%",
@@ -14,7 +22,20 @@ const logApiUsage = (action) => {
   console.log(`[MAPS API] ${action} - ${new Date().toISOString()}`)
 }
 
-const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatus, mockMode }) => {
+// Debug function to log marker positions
+const logMarkerPosition = (type, position) => {
+  if (!position) {
+    console.error(`Invalid ${type} position:`, position)
+    return
+  }
+
+  console.log(
+    `Rendering ${type} marker at:`,
+    position ? `lat: ${position.lat.toFixed(7)}, lng: ${position.lng.toFixed(7)}` : "undefined",
+  )
+}
+
+const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatus, isLoading = false }) => {
   const [directions, setDirections] = useState(null)
   const [mapsLoaded, setMapsLoaded] = useState(false)
   const [directionsRequested, setDirectionsRequested] = useState(false)
@@ -27,26 +48,12 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
   const directionsRequestTimeout = useRef(null)
   const { renderAdvancedMarker } = useAdvancedMarker()
 
-  // Use the exact coordinates from the screenshots for Halifax locations
-  const fixedPickupLocation = pickupLocation
-    ? {
-        ...pickupLocation,
-        lat: 44.6430,
-        lng: -63.5793,
-      }
-    : null
-
-  const fixedDropoffLocation = dropoffLocation
-    ? {
-        ...dropoffLocation,
-        lat: 44.6418,
-        lng: -63.5784,
-      }
-    : null
+  const pickupLoc = pickupLocation || null
+  const dropoffLoc = dropoffLocation || null
 
   // Determine which locations to show directions for based on trip status
   const origin = currentLocation
-  const destination = tripStatus === "pickup" ? fixedPickupLocation : fixedDropoffLocation
+  const destination = tripStatus === "pickup" ? pickupLoc : dropoffLoc
 
   // Default to Halifax if no current location
   const center = currentLocation || { lat: 44.6476, lng: -63.5728 }
@@ -121,12 +128,12 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
 
     const bounds = new window.google.maps.LatLngBounds()
 
-    if (fixedPickupLocation) {
-      bounds.extend(new window.google.maps.LatLng(fixedPickupLocation.lat, fixedPickupLocation.lng))
+    if (pickupLoc) {
+      bounds.extend(new window.google.maps.LatLng(pickupLoc.lat, pickupLoc.lng))
     }
 
-    if (fixedDropoffLocation) {
-      bounds.extend(new window.google.maps.LatLng(fixedDropoffLocation.lat, fixedDropoffLocation.lng))
+    if (dropoffLoc) {
+      bounds.extend(new window.google.maps.LatLng(dropoffLoc.lat, dropoffLoc.lng))
     }
 
     if (currentLocation) {
@@ -152,7 +159,7 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
         window.google.maps.event.removeListener(zoomChangeBoundsListener)
       }
     }
-  }, [mapsLoaded, currentLocation, fixedPickupLocation, fixedDropoffLocation, mapBounds])
+  }, [mapsLoaded, currentLocation, pickupLoc, dropoffLoc, mapBounds])
 
   // Helper function to compare bounds
   const boundsEqual = (bounds1, bounds2) => {
@@ -181,120 +188,187 @@ const DriverMap = ({ currentLocation, pickupLocation, dropoffLocation, tripStatu
     currentLocation: currentLocation
       ? `lat: ${currentLocation.lat.toFixed(7)}, lng: ${currentLocation.lng.toFixed(7)}`
       : "undefined",
-    pickupLocation: fixedPickupLocation
-      ? `lat: ${fixedPickupLocation.lat.toFixed(7)}, lng: ${fixedPickupLocation.lng.toFixed(7)}`
-      : "undefined",
-    dropoffLocation: fixedDropoffLocation
-      ? `lat: ${fixedDropoffLocation.lat.toFixed(7)}, lng: ${fixedDropoffLocation.lng.toFixed(7)}`
-      : "undefined",
+    pickupLocation: pickupLoc ? `lat: ${pickupLoc.lat.toFixed(7)}, lng: ${pickupLoc.lng.toFixed(7)}` : "undefined",
+    dropoffLocation: dropoffLoc ? `lat: ${dropoffLoc.lat.toFixed(7)}, lng: ${dropoffLoc.lng.toFixed(7)}` : "undefined",
     tripStatus,
+    isLoading,
   })
 
+  // Check if the renderAdvancedMarker function is working correctly
+  // The issue might be that the advanced marker isn't being rendered properly
+  // Let's modify the code to ensure the marker is always visible
+
+  // Add this debug log to see if currentLocation is actually available
+  console.log("DEBUG - Current location for marker:", currentLocation)
+
   return (
-    <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY} onLoad={handleMapsLoaded}>
-      <GoogleMap mapContainerStyle={mapContainerStyle} center={center} zoom={14} onLoad={handleMapLoad}>
-        {mapsLoaded && (
-          <>
-            {/* Current location */}
-            {currentLocation &&
-              renderAdvancedMarker({
-                position: currentLocation,
-                title: "YOU",
-                color: "blue",
-                size: 50,
-                onClick: () => setSelectedMarker("current"),
-              })}
+    <>
+      {isLoading && (
+        <div className="location-loading-overlay">
+          <div className="loading-spinner">
+            <Loader size={32} className="spinner-icon" />
+            <span>Getting your location...</span>
+          </div>
+        </div>
+      )}
 
-            {/* Pickup location - Always show */}
-            {fixedPickupLocation &&
-              renderAdvancedMarker({
-                position: fixedPickupLocation,
-                title: "PICKUP",
-                color: "green",
-                size: 40,
-                onClick: () => setSelectedMarker("pickup"),
-              })}
+      <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY} onLoad={handleMapsLoaded}>
+        <GoogleMap mapContainerStyle={mapContainerStyle} center={center} zoom={14} onLoad={handleMapLoad}>
+          {mapsLoaded && (
+            <>
+              {/* Current location */}
+              {currentLocation && (
+                <>
+                  {logMarkerPosition("current location", currentLocation)}
+                  {/* Try advanced marker first */}
+                  {renderAdvancedMarker({
+                    position: currentLocation,
+                    title: "YOU",
+                    color: "blue",
+                    size: 50,
+                    animation: window.google.maps.Animation.BOUNCE,
+                    onClick: () => setSelectedMarker("current"),
+                  })}
 
-            {/* Dropoff location - Always show */}
-            {fixedDropoffLocation &&
-              renderAdvancedMarker({
-                position: fixedDropoffLocation,
-                title: "DROPOFF",
-                color: "red",
-                size: 40,
-                onClick: () => setSelectedMarker("dropoff"),
-              })}
+                  {/* Fallback standard marker */}
+                  <Marker
+                    position={currentLocation}
+                    title="YOU"
+                    icon={{
+                      url: `http://maps.google.com/mapfiles/ms/icons/blue-dot.png`,
+                      scaledSize: new window.google.maps.Size(50, 50),
+                    }}
+                    animation={window.google.maps.Animation.BOUNCE}
+                    onClick={() => setSelectedMarker("current")}
+                  />
+                </>
+              )}
 
-            {/* Info windows for markers */}
-            {selectedMarker === "current" && currentLocation && (
-              <InfoWindow position={currentLocation} onCloseClick={() => setSelectedMarker(null)}>
-                <div>
-                  <h3>Your Location</h3>
-                  <p>Current position</p>
-                </div>
-              </InfoWindow>
-            )}
+              {/* Pickup location - Always show */}
+              {pickupLoc && (
+                <>
+                  {logMarkerPosition("pickup", pickupLoc)}
+                  {renderAdvancedMarker({
+                    position: pickupLoc,
+                    title: "PICKUP",
+                    color: "green",
+                    size: 40,
+                    onClick: () => setSelectedMarker("pickup"),
+                  })}
 
-            {selectedMarker === "pickup" && fixedPickupLocation && (
-              <InfoWindow position={fixedPickupLocation} onCloseClick={() => setSelectedMarker(null)}>
-                <div>
-                  <h3>Pickup Location</h3>
-                  <p>{fixedPickupLocation.address}</p>
-                </div>
-              </InfoWindow>
-            )}
+                  {/* Fallback standard marker */}
+                  <Marker
+                    position={pickupLoc}
+                    title="PICKUP"
+                    icon={{
+                      url: `http://maps.google.com/mapfiles/ms/icons/green-dot.png`,
+                      scaledSize: new window.google.maps.Size(40, 40),
+                    }}
+                    onClick={() => setSelectedMarker("pickup")}
+                  />
+                </>
+              )}
 
-            {selectedMarker === "dropoff" && fixedDropoffLocation && (
-              <InfoWindow position={fixedDropoffLocation} onCloseClick={() => setSelectedMarker(null)}>
-                <div>
-                  <h3>Dropoff Location</h3>
-                  <p>{fixedDropoffLocation.address}</p>
-                </div>
-              </InfoWindow>
-            )}
+              {/* Dropoff location - Always show */}
+              {dropoffLoc && (
+                <>
+                  {logMarkerPosition("dropoff", dropoffLoc)}
+                  {renderAdvancedMarker({
+                    position: dropoffLoc,
+                    title: "DROPOFF",
+                    color: "red",
+                    size: 40,
+                    onClick: () => setSelectedMarker("dropoff"),
+                  })}
 
-            {/* Directions */}
-            {origin && destination && tripStatus !== "waiting" && tripStatus !== "completed" && directionsRequested && (
-              <DirectionsService
-                options={{
-                  origin: origin,
-                  destination: destination,
-                  travelMode: "DRIVING",
-                  optimizeWaypoints: true,
-                  provideRouteAlternatives: false,
-                  avoidHighways: false,
-                  avoidTolls: false,
-                  // Request the shortest path instead of fastest
-                  drivingOptions: {
-                    departureTime: new Date(),
-                    trafficModel: "bestguess",
-                  },
-                  // This is the key setting for shortest path
-                  optimizeWaypoints: true,
-                }}
-                callback={directionsCallback}
-              />
-            )}
+                  {/* Fallback standard marker */}
+                  <Marker
+                    position={dropoffLoc}
+                    title="DROPOFF"
+                    icon={{
+                      url: `http://maps.google.com/mapfiles/ms/icons/red-dot.png`,
+                      scaledSize: new window.google.maps.Size(40, 40),
+                    }}
+                    onClick={() => setSelectedMarker("dropoff")}
+                  />
+                </>
+              )}
 
-            {directions && (
-              <DirectionsRenderer
-                options={{
-                  directions: directions,
-                  suppressMarkers: true,
-                  polylineOptions: {
-                    strokeColor: "#4285F4",
-                    strokeWeight: 5,
-                    strokeOpacity: 0.8,
-                  },
-                  // Show the shortest route if multiple routes are returned
-                  routeIndex: 0,
-                }}
-              />
-            )}
-          </>
-        )}
-      </GoogleMap>
-    </LoadScript>
+              {/* Info windows for markers */}
+              {selectedMarker === "current" && currentLocation && (
+                <InfoWindow position={currentLocation} onCloseClick={() => setSelectedMarker(null)}>
+                  <div>
+                    <h3>Your Location</h3>
+                    <p>Current position</p>
+                  </div>
+                </InfoWindow>
+              )}
+
+              {selectedMarker === "pickup" && pickupLoc && (
+                <InfoWindow position={pickupLoc} onCloseClick={() => setSelectedMarker(null)}>
+                  <div>
+                    <h3>Pickup Location</h3>
+                    <p>{pickupLoc.address}</p>
+                  </div>
+                </InfoWindow>
+              )}
+
+              {selectedMarker === "dropoff" && dropoffLoc && (
+                <InfoWindow position={dropoffLoc} onCloseClick={() => setSelectedMarker(null)}>
+                  <div>
+                    <h3>Dropoff Location</h3>
+                    <p>{dropoffLoc.address}</p>
+                  </div>
+                </InfoWindow>
+              )}
+
+              {/* Directions */}
+              {origin &&
+                destination &&
+                tripStatus !== "waiting" &&
+                tripStatus !== "completed" &&
+                directionsRequested && (
+                  <DirectionsService
+                    options={{
+                      origin: origin,
+                      destination: destination,
+                      travelMode: "DRIVING",
+                      optimizeWaypoints: true,
+                      provideRouteAlternatives: false,
+                      avoidHighways: false,
+                      avoidTolls: false,
+                      // Request the shortest path instead of fastest
+                      drivingOptions: {
+                        departureTime: new Date(),
+                        trafficModel: "bestguess",
+                      },
+                      // This is the key setting for shortest path
+                      optimizeWaypoints: true,
+                    }}
+                    callback={directionsCallback}
+                  />
+                )}
+
+              {directions && (
+                <DirectionsRenderer
+                  options={{
+                    directions: directions,
+                    suppressMarkers: true,
+                    polylineOptions: {
+                      strokeColor: "#4285F4",
+                      strokeWeight: 5,
+                      strokeOpacity: 0.8,
+                    },
+                    // Show the shortest route if multiple routes are returned
+                    routeIndex: 0,
+                  }}
+                />
+              )}
+            </>
+          )}
+        </GoogleMap>
+      </LoadScript>
+    </>
   )
 }
 

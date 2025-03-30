@@ -1,12 +1,15 @@
 "use client"
+import { Bell } from "lucide-react"
 
-const DriverHeader = ({ title, tripStatus, mockMode, toggleMockMode }) => {
+const DriverHeader = ({ title, tripStatus, unreadNotifications = 0, toggleNotifications }) => {
   return (
     <header className="driver-header">
       <h1>{title}</h1>
       <div className="header-actions">
-        <button className={`mode-toggle ${mockMode ? "active" : ""}`} onClick={toggleMockMode}>
-          Mock Mode
+        {/* Notification bell with badge */}
+        <button className="notification-button" onClick={toggleNotifications}>
+          <Bell size={20} />
+          {unreadNotifications > 0 && <span className="notification-badge">{unreadNotifications}</span>}
         </button>
 
         {tripStatus !== "waiting" && (

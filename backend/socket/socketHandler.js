@@ -6,6 +6,9 @@ const tripSubscriptions = new Map()
 const driverLocations = new Map()
 // Track if Kafka is enabled
 let isKafkaEnabled = false
+// Import the function to send to user topic
+import { sendToUserTopic, createUserSpecificTopic } from "../kafka/driverNotificationService.js"
+import mongoose from "mongoose"
 
 export const handleSocketConnections = (io, kafkaProducer) => {
   // Set Kafka status based on the producer
@@ -24,6 +27,10 @@ export const handleSocketConnections = (io, kafkaProducer) => {
     socket.on("driverConnected", (data) => {
       console.log("Driver connected:", data.driverId, "with socket ID:", socket.id)
       activeDrivers.set(data.driverId, socket.id)
+
+      // Join driver-specific room
+      socket.join(`driver:${data.driverId}`)
+      console.log(`Driver joined room: driver:${data.driverId}`)
 
       // If driver has an active trip, join that trip's room
       if (data.tripId) {
@@ -82,6 +89,34 @@ export const handleSocketConnections = (io, kafkaProducer) => {
         })
       } else {
         console.log("No driver location available for requested trip")
+      }
+    })
+
+    // Add a handler for getTripDetails event (around line 120)
+    // Trip details request
+    socket.on("getTripDetails", async (data) => {
+      if (!data || !data.tripId) {
+        console.error("Invalid request for trip details:", data)
+        return
+      }
+
+      console.log("Client requested trip details for trip:", data.tripId)
+
+      try {
+        // Fetch trip details from database
+        const Trip = mongoose.model("Trip")
+        const tripDetails = await Trip.findOne({ id: data.tripId })
+
+        if (tripDetails) {
+          console.log("Found trip details, sending to client")
+          socket.emit("tripDetails", tripDetails)
+        } else {
+          console.log("No trip found with ID:", data.tripId)
+          socket.emit("tripDetails", null)
+        }
+      } catch (error) {
+        console.error("Error fetching trip details:", error)
+        socket.emit("tripDetails", null)
       }
     })
 
@@ -182,6 +217,104 @@ export const handleSocketConnections = (io, kafkaProducer) => {
       }
     })
 
+    // New handler for accepting order from notification
+    socket.on("acceptOrderFromNotification", async (data) => {
+      console.log("Order accepted from notification:", data)
+
+      const { orderId, userId, from_address, to_address, amount, driverId, pickupLocation, dropoffLocation } = data
+
+      // Generate a trip ID
+      const tripId = `T${Math.floor(Math.random() * 100000)}`
+
+      // Ensure we have valid location objects
+      const validPickupLocation = {
+        address: from_address,
+        lat: pickupLocation?.lat || 44.643,
+        lng: pickupLocation?.lng || -63.5793,
+      }
+
+      const validDropoffLocation = {
+        address: to_address,
+        lat: dropoffLocation?.lat || 44.6418,
+        lng: dropoffLocation?.lng || -63.5784,
+      }
+
+      console.log("Creating trip with pickup location:", validPickupLocation)
+      console.log("Creating trip with dropoff location:", validDropoffLocation)
+
+      // Create a new trip object
+      const newTrip = {
+        id: tripId,
+        driverId: driverId,
+        customerId: userId,
+        status: "pickup",
+        pickupLocation: validPickupLocation,
+        dropoffLocation: validDropoffLocation,
+        packageDetails: `Order #${orderId}`,
+        price: amount,
+        estimatedTime: "15 min",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+
+      try {
+        // Save the trip to the database if possible
+        const Trip = mongoose.model("Trip")
+        const savedTrip = new Trip(newTrip)
+        await savedTrip.save()
+        console.log(`Trip ${tripId} saved to database`)
+      } catch (error) {
+        console.error("Error saving trip to database:", error)
+        // Continue with the in-memory trip object even if DB save fails
+      }
+
+      // Create a user-specific Kafka topic if Kafka is enabled
+      if (isKafkaEnabled && userId) {
+        try {
+          // Create the topic
+          await createUserSpecificTopic(userId)
+
+          // Send initial trip data to the user topic
+          await sendToUserTopic(userId, {
+            type: "trip_created",
+            tripId: tripId,
+            trip: newTrip,
+            timestamp: new Date().toISOString(),
+          })
+
+          console.log(`Created user topic and sent initial trip data for user ${userId}`)
+        } catch (error) {
+          console.error("Error creating user topic:", error)
+        }
+      }
+
+      // Emit trip assigned event to the driver
+      socket.emit("tripAssigned", newTrip)
+
+      // Join the trip room
+      socket.join(`trip:${tripId}`)
+
+      // Broadcast trip status update
+      io.to(`trip:${tripId}`).emit("tripStatusUpdate", {
+        tripId: tripId,
+        status: "pickup",
+        source: "socket",
+      })
+
+      // Store the trip ID for this driver
+      const driverSocketId = activeDrivers.get(driverId)
+      if (driverSocketId) {
+        tripSubscriptions.set(driverId, tripId)
+      }
+
+      // Return confirmation
+      socket.emit("orderAcceptanceConfirmed", {
+        success: true,
+        tripId: tripId,
+        message: "Order accepted successfully",
+      })
+    })
+
     // Trip rejected
     socket.on("tripRejected", (data) => {
       console.log("Trip rejected:", data.tripId, "by driver:", data.driverId)
@@ -221,5 +354,22 @@ export const handleSocketConnections = (io, kafkaProducer) => {
       }
     })
   })
+
+  // Function to broadcast notifications to all online drivers
+  // This can be called from other parts of the application
+  return {
+    broadcastToDrivers: (notification) => {
+      console.log(`Broadcasting notification to ${activeDrivers.size} active drivers:`, notification)
+
+      // Send to all active drivers
+      for (const [driverId, socketId] of activeDrivers.entries()) {
+        const socket = io.sockets.sockets.get(socketId)
+        if (socket) {
+          socket.emit("driverNotification", notification)
+          console.log(`Sent notification to driver ${driverId}`)
+        }
+      }
+    },
+  }
 }
 
