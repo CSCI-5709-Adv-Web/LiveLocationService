@@ -2,6 +2,7 @@ import { Kafka } from "kafkajs"
 import { processLocationUpdate } from "./locationConsumer.js"
 import dotenv from "dotenv"
 import { handleSocketConnections } from "../socket/socket.js"
+import mongoose from "mongoose"
 
 dotenv.config()
 
@@ -166,6 +167,7 @@ export const setupKafkaProducer = () => {
   }
 }
 
+// Update the setupKafkaConsumer function to handle the specific event formats
 export const setupKafkaConsumer = (io) => {
   const consumer = kafka.consumer({ groupId: "location-tracking-group" })
   let socketHandler = null
@@ -195,6 +197,40 @@ export const setupKafkaConsumer = (io) => {
                   timestamp,
                   source: "kafka",
                 })
+
+                // Try to find the trip to get the customer ID
+                try {
+                  const Trip = mongoose.model("Trip")
+                  const tripDetails = await Trip.findOne({ id: tripId })
+
+                  if (tripDetails && tripDetails.customerId) {
+                    const orderId = tripDetails.packageDetails.replace("Order #", "")
+
+                    // Format the event for the user-specific topic
+                    const locationEvent = {
+                      eventType: "DriverLiveLocation",
+                      orderId: orderId,
+                      timestamp: timestamp || Date.now(),
+                      data: {
+                        message: "Driver location updated",
+                        location: {
+                          lat: location.lat,
+                          lng: location.lng,
+                          heading: 180, // Default heading
+                          speed: 35, // Default speed
+                        },
+                      },
+                    }
+
+                    // Send to user-specific topic
+                    const userTopicProducer = setupKafkaProducer()
+                    if (userTopicProducer && userTopicProducer.sendToUserTopic) {
+                      await userTopicProducer.sendToUserTopic(tripDetails.customerId, locationEvent)
+                    }
+                  }
+                } catch (error) {
+                  console.error("Error forwarding location update to user topic:", error)
+                }
               }
             } else if (topic === TRIP_STATUS_TOPIC) {
               const { tripId, status, timestamp } = messageValue
@@ -206,6 +242,45 @@ export const setupKafkaConsumer = (io) => {
                   timestamp,
                   source: "kafka",
                 })
+
+                // Try to find the trip to get the customer ID
+                try {
+                  const Trip = mongoose.model("Trip")
+                  const tripDetails = await Trip.findOne({ id: tripId })
+
+                  if (tripDetails && tripDetails.customerId) {
+                    const orderId = tripDetails.packageDetails.replace("Order #", "")
+
+                    // Map internal status to user-facing status
+                    const statusMap = {
+                      pickup: "AWAITING_PICKUP",
+                      delivering: "IN_TRANSIT",
+                      completed: "DELIVERED",
+                    }
+
+                    const userStatus = statusMap[status] || status.toUpperCase()
+
+                    // Format the event for the user-specific topic
+                    const statusEvent = {
+                      eventType: "OrderStatusUpdated",
+                      orderId: orderId,
+                      timestamp: timestamp || Date.now(),
+                      data: {
+                        status: userStatus,
+                        estimatedArrival: status === "completed" ? "Delivered" : "10 minutes",
+                        message: getStatusMessage(status),
+                      },
+                    }
+
+                    // Send to user-specific topic
+                    const userTopicProducer = setupKafkaProducer()
+                    if (userTopicProducer && userTopicProducer.sendToUserTopic) {
+                      await userTopicProducer.sendToUserTopic(tripDetails.customerId, statusEvent)
+                    }
+                  }
+                } catch (error) {
+                  console.error("Error forwarding status update to user topic:", error)
+                }
               }
             } else if (topic === PAYMENT_NOTIFICATIONS_TOPIC) {
               console.log("Received payment notification:", messageValue)
@@ -252,5 +327,19 @@ export const setupKafkaConsumer = (io) => {
   connect()
 
   return consumer
+}
+
+// Helper function to get status message based on status
+const getStatusMessage = (status) => {
+  switch (status) {
+    case "pickup":
+      return "Driver is heading to pickup location"
+    case "delivering":
+      return "Your order is now in transit"
+    case "completed":
+      return "Your order has been delivered"
+    default:
+      return `Order status updated to ${status}`
+  }
 }
 

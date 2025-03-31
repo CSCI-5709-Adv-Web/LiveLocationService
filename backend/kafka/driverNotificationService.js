@@ -136,8 +136,8 @@ export const createUserSpecificTopic = async (userId) => {
   }
 }
 
-// Update the sendToUserTopic function to match the Python notification format
-export const sendToUserTopic = async (userId, message) => {
+// Update the sendToUserTopic function to match the exact event format provided
+export const sendToUserTopic = async (userId, event) => {
   try {
     if (!producer.isConnected) {
       await producer.connect()
@@ -146,38 +146,28 @@ export const sendToUserTopic = async (userId, message) => {
     // Format the topic name with the user UUID
     const topicName = `user-updates-${userId}`
 
-    // Add timestamp if not present
-    if (!message.timestamp) {
-      message.timestamp = new Date().toISOString()
-    }
-
-    // Generate a unique ID for the notification
-    const notificationId = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`
-
-    // Format the notification to match the Python create_notification function
-    const formattedMessage = {
-      id: message.id || notificationId,
-      title: message.title || message.eventType || "New Notification",
-      message: message.message || JSON.stringify(message.data),
-      type: message.notificationType || "info",
-      timestamp: message.timestamp,
-      data: message.data || {},
+    // Ensure the event has the required structure
+    const formattedEvent = {
+      eventType: event.eventType,
+      orderId: event.orderId,
+      timestamp: event.timestamp || Date.now(),
+      data: event.data || {},
     }
 
     await producer.send({
       topic: topicName,
       messages: [
         {
-          key: message.data?.orderId || userId,
-          value: JSON.stringify(formattedMessage),
+          key: event.orderId || userId,
+          value: JSON.stringify(formattedEvent),
         },
       ],
     })
 
-    console.log(`Sent message to user topic ${topicName}:`, formattedMessage)
+    console.log(`Sent event to user topic ${topicName}:`, formattedEvent)
     return true
   } catch (error) {
-    console.error(`Error sending message to user topic for user ${userId}:`, error)
+    console.error(`Error sending event to user topic for user ${userId}:`, error)
     return false
   }
 }

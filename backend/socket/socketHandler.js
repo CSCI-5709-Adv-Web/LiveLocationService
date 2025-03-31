@@ -144,8 +144,6 @@ export const handleSocketConnections = (io, kafkaProducer) => {
           const sent = await kafkaProducer.sendLocationUpdate(data.tripId, data.location)
           if (sent) {
             console.log("Location update sent to Kafka successfully")
-            // Don't emit via socket.io directly, let the Kafka consumer handle it
-            return
           } else {
             console.warn("Failed to send to Kafka, falling back to Socket.io")
           }
@@ -154,14 +152,14 @@ export const handleSocketConnections = (io, kafkaProducer) => {
         }
       }
 
-      // If Kafka is disabled or failed, broadcast directly via Socket.io
+      // Broadcast directly via Socket.io
       io.to(`trip:${data.tripId}`).emit("driverLocationUpdate", {
         tripId: data.tripId,
         location: data.location,
         source: "socket", // Add source for debugging
       })
 
-      // Also try to send location update to the user's Kafka topic if we have the trip details
+      // Also send location update to the user's Kafka topic if we have the trip details
       try {
         const Trip = mongoose.model("Trip")
         const tripDetails = await Trip.findOne({ id: data.tripId })
@@ -170,40 +168,24 @@ export const handleSocketConnections = (io, kafkaProducer) => {
           // Extract the orderId from packageDetails (e.g., "Order #123" -> "123")
           const orderId = tripDetails.packageDetails.replace("Order #", "")
 
-          // Get driver information - match the exact format from the Python function
-          const driverInfo = {
-            id: "driver_123",
-            name: "Michael Chen",
-            rating: 4.8,
-            trips: 1243,
-            vehicleType: "Toyota Prius",
-            vehicleNumber: "ABC 123",
-            image: "/placeholder.svg?height=100&width=100",
-          }
-
-          // Get distance message
-          const distanceMessage = getDistanceMessage(data.location, tripDetails)
-
-          // Prepare the notification data
-          const notificationData = {
+          // Prepare the event in the exact format required
+          const locationEvent = {
+            eventType: "DriverLiveLocation",
             orderId: orderId,
-            status: getStatusFromTripStatus(tripDetails.status),
-            driver: driverInfo,
-            currentLocation: data.location,
-            estimatedArrival: "5 minutes",
-            message: `Driver is ${distanceMessage}`,
+            timestamp: Date.now(),
+            data: {
+              message: "Driver location updated",
+              location: {
+                lat: data.location.lat,
+                lng: data.location.lng,
+                heading: 180, // Default heading if not provided
+                speed: 35, // Default speed if not provided
+              },
+            },
           }
 
-          // Send location update to user-specific topic with proper title and message
-          await sendToUserTopic(tripDetails.customerId, {
-            id: `location-${data.tripId}-${Date.now()}`,
-            title: "Driver Location Updated",
-            message: `Driver is ${distanceMessage}`,
-            notificationType: "info",
-            eventType: "DriverLocationUpdated",
-            data: notificationData,
-            timestamp: new Date().toISOString(),
-          })
+          // Send location update to user-specific topic
+          await sendToUserTopic(tripDetails.customerId, locationEvent)
           console.log(`Sent driver location update to user topic for user ${tripDetails.customerId}`)
         }
       } catch (error) {
@@ -221,8 +203,6 @@ export const handleSocketConnections = (io, kafkaProducer) => {
           const sent = await kafkaProducer.sendTripStatusUpdate(data.tripId, data.status)
           if (sent) {
             console.log("Status update sent to Kafka successfully")
-            // Don't emit via socket.io directly, let the Kafka consumer handle it
-            return
           } else {
             console.warn("Failed to send to Kafka, falling back to Socket.io")
           }
@@ -231,14 +211,14 @@ export const handleSocketConnections = (io, kafkaProducer) => {
         }
       }
 
-      // If Kafka is disabled or failed, broadcast directly via Socket.io
+      // Broadcast directly via Socket.io
       io.to(`trip:${data.tripId}`).emit("tripStatusUpdate", {
         tripId: data.tripId,
         status: data.status,
         source: "socket", // Add source for debugging
       })
 
-      // Also try to send status update to the user's Kafka topic if we have the trip details
+      // Also send status update to the user's Kafka topic if we have the trip details
       try {
         const Trip = mongoose.model("Trip")
         const tripDetails = await Trip.findOne({ id: data.tripId })
@@ -256,40 +236,23 @@ export const handleSocketConnections = (io, kafkaProducer) => {
           // Extract the orderId from packageDetails (e.g., "Order #123" -> "123")
           const orderId = tripDetails.packageDetails.replace("Order #", "")
 
-          // Get driver information - match the exact format from the Python function
-          const driverInfo = {
-            id: "driver_123",
-            name: "Michael Chen",
-            rating: 4.8,
-            trips: 1243,
-            vehicleType: "Toyota Prius",
-            vehicleNumber: "ABC 123",
-            image: "/placeholder.svg?height=100&width=100",
-          }
-
           // Get status message
           const statusMessage = getStatusMessage(data.status)
 
-          // Prepare the notification data
-          const notificationData = {
+          // Prepare the event in the exact format required
+          const statusEvent = {
+            eventType: "OrderStatusUpdated",
             orderId: orderId,
-            status: userStatus,
-            estimatedArrival: data.status === "completed" ? "Delivered" : "5 minutes",
-            message: statusMessage,
-            driver: driverInfo,
-            currentLocation: driverLocations.get(data.tripId) || null,
+            timestamp: Date.now(),
+            data: {
+              status: userStatus,
+              estimatedArrival: data.status === "completed" ? "Delivered" : "10 minutes",
+              message: statusMessage,
+            },
           }
 
-          // Send status update to user-specific topic with proper title and message
-          await sendToUserTopic(tripDetails.customerId, {
-            id: `trip-${data.tripId}-${Date.now()}`,
-            title: `Order Status: ${userStatus}`,
-            message: statusMessage,
-            notificationType: "info",
-            eventType: "OrderStatusUpdated",
-            data: notificationData,
-            timestamp: new Date().toISOString(),
-          })
+          // Send status update to user-specific topic
+          await sendToUserTopic(tripDetails.customerId, statusEvent)
           console.log(`Sent trip status update to user topic for user ${tripDetails.customerId}`)
         }
       } catch (error) {
@@ -384,9 +347,9 @@ export const handleSocketConnections = (io, kafkaProducer) => {
           // Create the topic
           await createUserSpecificTopic(userId)
 
-          // Get driver information - match the exact format from the Python function
+          // Get driver information
           const driverInfo = {
-            id: "driver_123", // Use the exact ID from the Python function
+            id: "driver_123",
             name: "Michael Chen",
             rating: 4.8,
             trips: 1243,
@@ -395,26 +358,22 @@ export const handleSocketConnections = (io, kafkaProducer) => {
             image: "/placeholder.svg?height=100&width=100",
           }
 
-          // Prepare the notification data
-          const notificationData = {
-            orderId: orderId, // Use the exact orderId received from the request
-            status: "AWAITING_PICKUP",
-            estimatedArrival: "5 minutes",
-            message: "Driver has accepted your order",
-            driver: driverInfo,
-            currentLocation: currentLocation || { lat: 44.6470226, lng: -63.5942508 },
+          // Prepare the event in the exact format required
+          const orderAcceptedEvent = {
+            eventType: "Order Accepted",
+            orderId: orderId,
+            timestamp: Date.now(),
+            data: {
+              status: "AWAITING_PICKUP",
+              estimatedArrival: "5 minutes",
+              message: "Driver has accepted your order",
+              driver: driverInfo,
+              location: currentLocation || { lat: 44.6470226, lng: -63.5942508 },
+            },
           }
 
-          // Send structured notification to the user topic with proper title and message
-          await sendToUserTopic(userId, {
-            id: `order-${orderId}-${Date.now()}`,
-            title: "Order Accepted",
-            message: `Driver ${driverInfo.name} has accepted your order #${orderId}`,
-            notificationType: "success",
-            eventType: "OrderStatusUpdated",
-            data: notificationData,
-            timestamp: new Date().toISOString(),
-          })
+          // Send structured notification to the user topic
+          await sendToUserTopic(userId, orderAcceptedEvent)
 
           console.log(`Sent order acceptance notification to user ${userId}`)
         } catch (error) {
