@@ -102,6 +102,7 @@ export const createUserSpecificTopic = async (userId) => {
     const admin = kafka.admin()
     await admin.connect()
 
+    // Format the topic name with the user UUID
     const topicName = `user-updates-${userId}`
 
     // Check if topic already exists
@@ -135,31 +136,45 @@ export const createUserSpecificTopic = async (userId) => {
   }
 }
 
-/**
- * Send message to user-specific topic
- * @param {String} userId - User ID to send message to
- * @param {Object} message - Message to send
- * @returns {Promise<Boolean>} - Whether message was sent successfully
- */
+// Update the sendToUserTopic function to match the Python notification format
 export const sendToUserTopic = async (userId, message) => {
   try {
     if (!producer.isConnected) {
       await producer.connect()
     }
 
+    // Format the topic name with the user UUID
     const topicName = `user-updates-${userId}`
+
+    // Add timestamp if not present
+    if (!message.timestamp) {
+      message.timestamp = new Date().toISOString()
+    }
+
+    // Generate a unique ID for the notification
+    const notificationId = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`
+
+    // Format the notification to match the Python create_notification function
+    const formattedMessage = {
+      id: message.id || notificationId,
+      title: message.title || message.eventType || "New Notification",
+      message: message.message || JSON.stringify(message.data),
+      type: message.notificationType || "info",
+      timestamp: message.timestamp,
+      data: message.data || {},
+    }
 
     await producer.send({
       topic: topicName,
       messages: [
         {
-          key: message.tripId || message.orderId || userId,
-          value: JSON.stringify(message),
+          key: message.data?.orderId || userId,
+          value: JSON.stringify(formattedMessage),
         },
       ],
     })
 
-    console.log(`Sent message to user topic ${topicName}:`, message)
+    console.log(`Sent message to user topic ${topicName}:`, formattedMessage)
     return true
   } catch (error) {
     console.error(`Error sending message to user topic for user ${userId}:`, error)
@@ -225,13 +240,13 @@ export const startDriverNotificationConsumer = async (io) => {
                   console.log(`Sending notification to driver ${driver.driverId}`)
 
                   // Create proper location objects with coordinates
-                  const pickupLocation = {
+                  const pickupLocationCoords = {
                     lat: Number.parseFloat(pickupLocation.lat) || 44.643,
                     lng: Number.parseFloat(pickupLocation.lng) || -63.5793,
                     address: from_address,
                   }
 
-                  const dropoffLocation = {
+                  const dropoffLocationCoords = {
                     lat: Number.parseFloat(dropoffLocation.lat) || 44.6418,
                     lng: Number.parseFloat(dropoffLocation.lng) || -63.5784,
                     address: to_address,
@@ -248,21 +263,21 @@ export const startDriverNotificationConsumer = async (io) => {
                       distance: driver.distance,
                       status,
                       timestamp,
-                      pickupLocation,
-                      dropoffLocation,
+                      pickupLocation: pickupLocationCoords,
+                      dropoffLocation: dropoffLocationCoords,
                     },
                     timestamp: new Date().toISOString(),
                   })
                 } else {
                   // Broadcast to all drivers if specific room not found
                   // Create proper location objects with coordinates
-                  const pickupLocation = {
+                  const pickupLocationCoords = {
                     lat: Number.parseFloat(pickupLocation.lat) || 44.643,
                     lng: Number.parseFloat(pickupLocation.lng) || -63.5793,
                     address: from_address,
                   }
 
-                  const dropoffLocation = {
+                  const dropoffLocationCoords = {
                     lat: Number.parseFloat(dropoffLocation.lat) || 44.6418,
                     lng: Number.parseFloat(dropoffLocation.lng) || -63.5784,
                     address: to_address,
@@ -279,8 +294,8 @@ export const startDriverNotificationConsumer = async (io) => {
                       distance: driver.distance,
                       status,
                       timestamp,
-                      pickupLocation,
-                      dropoffLocation,
+                      pickupLocation: pickupLocationCoords,
+                      dropoffLocation: dropoffLocationCoords,
                     },
                     timestamp: new Date().toISOString(),
                   })
@@ -292,13 +307,13 @@ export const startDriverNotificationConsumer = async (io) => {
               console.log("No nearby drivers found, broadcasting to all drivers")
 
               // Create proper location objects with coordinates
-              const pickupLocation = {
+              const pickupLocationCoords = {
                 lat: Number.parseFloat(pickupLocation.lat) || 44.643,
                 lng: Number.parseFloat(pickupLocation.lng) || -63.5793,
                 address: from_address,
               }
 
-              const dropoffLocation = {
+              const dropoffLocationCoords = {
                 lat: Number.parseFloat(dropoffLocation.lat) || 44.6418,
                 lng: Number.parseFloat(dropoffLocation.lng) || -63.5784,
                 address: to_address,
@@ -314,8 +329,8 @@ export const startDriverNotificationConsumer = async (io) => {
                   amount,
                   status,
                   timestamp,
-                  pickupLocation,
-                  dropoffLocation,
+                  pickupLocation: pickupLocationCoords,
+                  dropoffLocation: dropoffLocationCoords,
                 },
                 timestamp: new Date().toISOString(),
               })

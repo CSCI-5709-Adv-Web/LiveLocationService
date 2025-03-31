@@ -476,7 +476,7 @@ const DriverApp = () => {
     console.log("Using pickup location:", pickupLocation)
     console.log("Using dropoff location:", dropoffLocation)
 
-    // Emit acceptance to server with properly formatted location data
+    // Emit acceptance to server with properly formatted location data and current driver location
     socket.emit("acceptOrderFromNotification", {
       orderId: request.orderId,
       userId: request.userId,
@@ -486,14 +486,35 @@ const DriverApp = () => {
       driverId: "D001",
       pickupLocation: pickupLocation,
       dropoffLocation: dropoffLocation,
+      currentLocation: currentLocation, // Include the driver's current location
     })
 
     // Remove from trip requests
     setTripRequests((prev) => prev.filter((req) => req.id !== request.id))
   }
 
+  // Add a function to reject an order with a reason
+  const cancelOrder = (orderId, userId, reason = "No drivers are available at the moment.") => {
+    console.log("Cancelling order:", orderId, "for user:", userId)
+
+    socket.emit("cancelOrder", {
+      orderId,
+      userId,
+      reason,
+    })
+  }
+
+  // Update the rejectTripRequest function to use cancelOrder when appropriate
   const rejectTripRequest = (requestId) => {
     console.log("Rejecting trip request:", requestId)
+
+    // Find the request in the trip requests
+    const request = tripRequests.find((req) => req.id === requestId)
+
+    if (request && request.userId && request.orderId) {
+      // Cancel the order with a reason
+      cancelOrder(request.orderId, request.userId, "Driver is unavailable for this trip")
+    }
 
     // Remove from trip requests
     setTripRequests((prev) => prev.filter((req) => req.id !== requestId))
