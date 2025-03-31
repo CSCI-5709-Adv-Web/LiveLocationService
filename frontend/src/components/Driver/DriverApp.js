@@ -12,7 +12,6 @@ import TripRequestsList from "./TripRequestsList" // Import the new component
 import "../../styles/Driver.css"
 import { ArrowLeft } from "lucide-react"
 import { Link } from "react-router-dom"
-import { orderService } from "../../services/api-service"
 
 // Use the port from environment variable or default to 5000
 const PORT = process.env.PORT || 5000
@@ -431,42 +430,18 @@ const DriverApp = () => {
     })
   }
 
-  const acceptOrder = async () => {
+  const acceptOrder = () => {
     if (!newOrder) return
 
-    try {
-      console.log("Accepting order:", newOrder.id)
+    setTrip(newOrder)
+    setTripStatus("pickup")
+    setNewOrder(null)
 
-      // Update the order status using the order service API
-      // This will automatically handle token acquisition through the API service
-      await orderService.updateOrderStatus(newOrder.id, "AWAITING PICKUP")
-      console.log("Order status updated successfully in order service")
-
-      // Update local state
-      setTrip(newOrder)
-      setTripStatus("pickup")
-      setNewOrder(null)
-
-      // Emit trip acceptance to socket for real-time updates
-      socket.emit("tripAccepted", {
-        tripId: newOrder.id,
-        driverId: "D001",
-      })
-    } catch (error) {
-      console.error("Error updating order status:", error)
-      setIssues((prev) => [...prev, `Error updating order status: ${error.message || "Unknown error"}`])
-
-      // Continue with local updates even if API fails - you might want to change this behavior
-      setTrip(newOrder)
-      setTripStatus("pickup")
-      setNewOrder(null)
-
-      // Emit trip acceptance to socket for real-time updates
-      socket.emit("tripAccepted", {
-        tripId: newOrder.id,
-        driverId: "D001",
-      })
-    }
+    // Emit trip acceptance to server
+    socket.emit("tripAccepted", {
+      tripId: newOrder.id,
+      driverId: "D001",
+    })
   }
 
   const rejectOrder = () => {
