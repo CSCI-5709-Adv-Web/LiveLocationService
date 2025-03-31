@@ -43,66 +43,12 @@ apiClient.interceptors.request.use(
 
 // Order service API functions
 export const orderService = {
-  // General method to update order status and send notifications
-  updateOrderStatus: async (orderId, status, driverId, customerId, additionalData = {}) => {
+  updateOrderStatus: async (orderId, status) => {
     try {
-      // Prepare the status update payload
-      const statusUpdatePayload = {
+      const response = await apiClient.put("/order/updateStatus", {
         orderId,
         status,
-        driverId,
-      }
-
-      // Send the status update to the backend
-      const response = await apiClient.put("/order/updateStatus", statusUpdatePayload)
-
-      // Prepare notification payload for Kafka
-      const notificationPayload = {
-        orderId,
-        status,
-        ...additionalData,
-      }
-
-      // If this is a driver-initiated update, include driver info
-      if (driverId && status !== "CANCELLED") {
-        // Get driver info from localStorage or a separate API call if needed
-        const driverName = localStorage.getItem("driverName") || "Driver"
-
-        notificationPayload.driver = {
-          id: driverId,
-        }
-
-        // Add status-specific messages and estimated arrival
-        switch (status) {
-          case "AWAITING PICKUP":
-            notificationPayload.message = "Driver has accepted your order"
-            notificationPayload.estimatedArrival = additionalData.estimatedArrival || "15 minutes"
-            break
-          case "OUT FOR DELIVERY":
-            notificationPayload.message = "Driver has picked up your order"
-            notificationPayload.estimatedArrival = additionalData.estimatedArrival || "10 minutes"
-            break
-          case "DELIVERED":
-            notificationPayload.message = "Your order has been delivered"
-            break
-          default:
-            notificationPayload.message = `Order status updated to ${status}`
-        }
-      } else if (status === "CANCELLED") {
-        // Handle cancellation
-        notificationPayload.message = additionalData.message || "Your order has been cancelled"
-      }
-
-      // Send notification to Kafka
-      if (customerId) {
-        await apiClient.post("/notifications/send", {
-          topic: `user-updates-${customerId}`,
-          type: status === "CANCELLED" ? "error" : "info",
-          event: "OrderStatusUpdated",
-          payload: notificationPayload,
-        })
-      }
-
+      })
       return response.data
     } catch (error) {
       console.error("Error updating order status:", error)
