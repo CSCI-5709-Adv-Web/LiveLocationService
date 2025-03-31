@@ -7,10 +7,8 @@ import DriverHeader from "./DriverHeader"
 import DriverStatus from "./DriverStatus"
 import TripDetails from "./TripDetails"
 import NewOrderCard from "./NewOrderCard"
-import NotificationCenter from "./NotificationCenter"
-import TripRequestsList from "./TripRequestsList" // Import the new component
 import "../../styles/Driver.css"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, AlertCircle } from "lucide-react"
 import { Link } from "react-router-dom"
 import { orderService } from "../../services/api-service"
 
@@ -18,58 +16,70 @@ import { orderService } from "../../services/api-service"
 const PORT = process.env.PORT || 5000
 // Use the socket URL from environment variable or default to localhost
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || `http://localhost:${PORT}`
-
-console.log(`Connecting to Socket.io server at: ${SOCKET_URL}`)
+// Create socket outside component to prevent recreation on re-renders
 const socket = io(SOCKET_URL, {
   reconnection: true,
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
-  timeout: 10000,
-  transports: ["websocket", "polling"],
+  timeout: 20000,
 })
 
-// Default Halifax location as fallback
-const DEFAULT_LOCATION = {
-  lat: 44.6470226,
-  lng: -63.5942508,
-}
-
-// Helper function to save location to localStorage
-const saveLocationToStorage = (location) => {
-  if (location && typeof location.lat === "number" && typeof location.lng === "number") {
-    localStorage.setItem("driverLastLocation", JSON.stringify(location))
-  }
-}
-
-// Helper function to get location from localStorage
-const getLocationFromStorage = () => {
-  try {
-    const savedLocation = localStorage.getItem("driverLastLocation")
-    if (savedLocation) {
-      return JSON.parse(savedLocation)
-    }
-  } catch (error) {
-    console.error("Error parsing saved location:", error)
-  }
-  return null
+// Status mapping between internal app states and API states
+const STATUS_MAPPING = {
+  pickup: "AWAITING PICKUP",
+  delivering: "OUT FOR DELIVERY",
+  completed: "DELIVERED",
 }
 
 const DriverApp = () => {
-  // Initialize with saved location or default
-  const savedLocation = getLocationFromStorage()
-  const [currentLocation, setCurrentLocation] = useState(savedLocation || DEFAULT_LOCATION)
+  const [currentLocation, setCurrentLocation] = useState(null)
   const [driverStatus, setDriverStatus] = useState("offline") // offline, online
   const [tripStatus, setTripStatus] = useState("waiting") // waiting, pickup, delivering, completed
   const [trip, setTrip] = useState(null)
   const [newOrder, setNewOrder] = useState(null)
   const [socketConnected, setSocketConnected] = useState(false)
   const [kafkaEnabled, setKafkaEnabled] = useState(false)
+  const [mockMode, setMockMode] = useState(true)
   const [issues, setIssues] = useState([])
-  const [notifications, setNotifications] = useState([]) // Add state for notifications
-  const [showNotifications, setShowNotifications] = useState(false) // Control notification panel visibility
-  const [tripRequests, setTripRequests] = useState([]) // Add state for trip requests
-  const [isLoadingLocation, setIsLoadingLocation] = useState(!savedLocation)
   const swipeRef = useRef(null)
+  const driverId = localStorage.getItem("driverId") || "D001" // Get driver ID from localStorage
+
+  // Mock data for testing
+  const mockTrip = {
+    id: "T7258",
+    customerName: "Alex Johnson",
+    customerId: "C001", // Added customer ID
+    packageDetails: "Medium-sized package, fragile",
+    pickupLocation: {
+      address: "5683 Spring Garden Rd, Halifax, NS B3J 1G9",
+      lat: 44.643,
+      lng: -63.5793,
+    },
+    dropoffLocation: {
+      address: "1456 Brenton St, Halifax, NS B3J 2K7",
+      lat: 44.6418,
+      lng: -63.5784,
+    },
+    price: 12.5,
+    estimatedTime: "15 min",
+  }
+
+  // Calculate estimated arrival time based on trip status and distance
+  const calculateEstimatedArrival = (status, tripData) => {
+    if (!tripData) return "15 minutes"
+
+    switch (status) {
+      case "AWAITING_PICKUP":
+      case "ACCEPTED":
+        return "15 minutes"
+      case "PICKED_UP":
+        return "10 minutes"
+      case "DELIVERING":
+        return "5 minutes"
+      default:
+        return tripData.estimatedTime || "15 minutes"
+    }
+  }
 
   // Handle position updates - defined as useCallback to prevent recreation
   const handlePositionUpdate = useCallback(
@@ -86,10 +96,6 @@ const DriverApp = () => {
 
       // Update local state
       setCurrentLocation(newLocation)
-      setIsLoadingLocation(false)
-
-      // Save to localStorage for persistence
-      saveLocationToStorage(newLocation)
 
       // Emit location update to server if socket is connected and driver is on a trip
       if (tripStatus !== "waiting" && tripStatus !== "completed" && socketConnected && driverStatus === "online") {
@@ -98,7 +104,7 @@ const DriverApp = () => {
           `lat: ${newLocation.lat.toFixed(7)}, lng: ${newLocation.lng.toFixed(7)}`,
         )
         socket.emit("driverLocationUpdate", {
-          tripId: trip?.id,
+          tripId: trip?.id || "T7258",
           location: newLocation,
         })
       }
@@ -111,27 +117,29 @@ const DriverApp = () => {
     (error) => {
       console.error("Error getting location:", error)
       setIssues((prev) => [...prev, "Geolocation error: " + error.message])
-      setIsLoadingLocation(false)
 
-      // Use saved location or default Halifax location as fallback
-      const fallbackLocation = getLocationFromStorage() || DEFAULT_LOCATION
+      // Use coordinates from the screenshots as fallback
+      const halifaxLocation = {
+        lat: 44.6470226,
+        lng: -63.5942508,
+      }
 
       console.log(
         "Using fallback location:",
-        `lat: ${fallbackLocation.lat.toFixed(7)}, lng: ${fallbackLocation.lng.toFixed(7)}`,
+        `lat: ${halifaxLocation.lat.toFixed(7)}, lng: ${halifaxLocation.lng.toFixed(7)}`,
       )
 
-      setCurrentLocation(fallbackLocation)
+      setCurrentLocation(halifaxLocation)
 
       // Emit the fallback location if socket is connected
       if (tripStatus !== "waiting" && tripStatus !== "completed" && socketConnected && driverStatus === "online") {
         console.log(
           "Emitting fallback location:",
-          `lat: ${fallbackLocation.lat.toFixed(7)}, lng: ${fallbackLocation.lng.toFixed(7)}`,
+          `lat: ${halifaxLocation.lat.toFixed(7)}, lng: ${halifaxLocation.lng.toFixed(7)}`,
         )
         socket.emit("driverLocationUpdate", {
-          tripId: trip?.id,
-          location: fallbackLocation,
+          tripId: trip?.id || "T7258",
+          location: halifaxLocation,
         })
       }
     },
@@ -146,22 +154,11 @@ const DriverApp = () => {
 
     // Try to get the current position first
     if (navigator.geolocation) {
-      console.log("Geolocation API is available, requesting position...")
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          console.log("Geolocation success:", position.coords)
-          handlePositionUpdate(position)
-        },
-        (error) => {
-          console.error("Geolocation error:", error)
-          handleError(error)
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        },
-      )
+      navigator.geolocation.getCurrentPosition(handlePositionUpdate, handleError, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      })
 
       // Then set up continuous watching with high accuracy
       watchId = navigator.geolocation.watchPosition(handlePositionUpdate, handleError, {
@@ -169,7 +166,6 @@ const DriverApp = () => {
         timeout: 10000,
         maximumAge: 5000,
       })
-      console.log("Geolocation watch initiated with ID:", watchId)
     } else {
       console.error("Geolocation is not supported by this browser")
       setIssues((prev) => [...prev, "Geolocation not supported by this browser"])
@@ -179,7 +175,6 @@ const DriverApp = () => {
     // Cleanup on unmount
     return () => {
       if (watchId) {
-        console.log("Cleaning up geolocation watch:", watchId)
         navigator.geolocation.clearWatch(watchId)
       }
     }
@@ -194,7 +189,7 @@ const DriverApp = () => {
       console.log("Driver connected to server with socket ID:", socket.id)
       setSocketConnected(true)
 
-      socket.emit("driverConnected", { driverId: "D001", tripId: trip?.id })
+      socket.emit("driverConnected", { driverId, tripId: trip?.id })
 
       // Send initial location if available
       if (currentLocation && driverStatus === "online") {
@@ -203,7 +198,7 @@ const DriverApp = () => {
           `lat: ${currentLocation.lat.toFixed(7)}, lng: ${currentLocation.lng.toFixed(7)}`,
         )
         socket.emit("driverLocationUpdate", {
-          tripId: trip?.id,
+          tripId: trip?.id || "T7258",
           location: currentLocation,
         })
       }
@@ -215,7 +210,7 @@ const DriverApp = () => {
     const handleConnectError = (error) => {
       console.error("Socket connection error:", error)
       setSocketConnected(false)
-      setIssues((prev) => [...prev, "Socket connection error: " + (error.message || "Unknown error")])
+      setIssues((prev) => [...prev, "Socket connection error: " + error.message])
     }
 
     const handleDisconnect = (reason) => {
@@ -257,77 +252,6 @@ const DriverApp = () => {
       }
     }
 
-    // Handle driver notifications from other microservices
-    const handleDriverNotification = (notification) => {
-      console.log("Received driver notification:", notification)
-
-      // Check if this is a duplicate notification by comparing with existing ones
-      // For delivery requests, check by orderId
-      if (notification.type === "delivery_request" && notification.data?.orderId) {
-        const isDuplicate = notifications.some(
-          (existingNotif) =>
-            existingNotif.type === "delivery_request" &&
-            existingNotif.data?.orderId === notification.data.orderId &&
-            // Consider notifications within 5 seconds as duplicates
-            new Date(existingNotif.received).getTime() > Date.now() - 5000,
-        )
-
-        if (isDuplicate) {
-          console.log("Ignoring duplicate delivery request notification:", notification.data.orderId)
-          return
-        }
-      }
-
-      // Add the notification to our state with a unique ID
-      const newNotification = {
-        id: Date.now(), // Use timestamp as a simple unique ID
-        ...notification,
-        read: false,
-        received: new Date().toISOString(),
-      }
-
-      setNotifications((prev) => [newNotification, ...prev])
-
-      // If it's a delivery request, add it to trip requests
-      if (notification.type === "delivery_request" && notification.data) {
-        const requestData = notification.data
-        const tripRequest = {
-          id: requestData.orderId || `REQ-${Date.now()}`,
-          orderId: requestData.orderId || `ORDER-${Date.now().toString(36)}`,
-          from: requestData.from_address || "Unknown pickup location",
-          to: requestData.to_address || "Unknown dropoff location",
-          price: requestData.amount || 0,
-          timestamp: notification.timestamp || new Date().toISOString(),
-          urgent: true,
-          pickupLocation: requestData.pickupLocation || {
-            lat: 44.643,
-            lng: -63.5793,
-            address: requestData.from_address || "Unknown pickup location",
-          },
-          dropoffLocation: requestData.dropoffLocation || {
-            lat: 44.6418,
-            lng: -63.5784,
-            address: requestData.to_address || "Unknown dropoff location",
-          },
-          userId: requestData.userId || "unknown",
-        }
-
-        setTripRequests((prev) => {
-          // Check if this request already exists
-          const exists = prev.some((req) => req.id === tripRequest.id)
-          if (!exists) {
-            return [tripRequest, ...prev]
-          }
-          return prev
-        })
-      }
-
-      // Show notification panel if it's not already visible
-      if (!showNotifications) {
-        setShowNotifications(true)
-      }
-    }
-
     // Add event listeners
     socket.on("connect", handleConnect)
     socket.on("connect_error", handleConnectError)
@@ -336,7 +260,6 @@ const DriverApp = () => {
     socket.on("tripAssigned", handleTripAssigned)
     socket.on("tripStatusUpdate", handleTripStatusUpdate)
     socket.on("serverConfig", handleServerConfig)
-    socket.on("driverNotification", handleDriverNotification)
 
     // If socket is already connected, emit connection info
     if (socket.connected) {
@@ -353,10 +276,9 @@ const DriverApp = () => {
       socket.off("tripAssigned", handleTripAssigned)
       socket.off("tripStatusUpdate", handleTripStatusUpdate)
       socket.off("serverConfig", handleServerConfig)
-      socket.off("driverNotification", handleDriverNotification)
       // Don't disconnect the socket here
     }
-  }, [trip?.id, currentLocation, driverStatus, notifications, showNotifications])
+  }, [trip?.id, currentLocation, driverStatus, driverId])
 
   // Send location updates periodically as a backup when socket is connected
   useEffect(() => {
@@ -377,7 +299,7 @@ const DriverApp = () => {
         `lat: ${currentLocation.lat.toFixed(7)}, lng: ${currentLocation.lng.toFixed(7)}`,
       )
       socket.emit("driverLocationUpdate", {
-        tripId: trip?.id,
+        tripId: trip?.id || "T7258",
         location: currentLocation,
       })
     }, 3000) // Every 3 seconds
@@ -385,31 +307,30 @@ const DriverApp = () => {
     return () => clearInterval(intervalId)
   }, [currentLocation, trip?.id, socketConnected, driverStatus, tripStatus])
 
-  // Try to restore trip state from localStorage on page load
+  // Mock mode - simulate new orders and trips for testing
   useEffect(() => {
-    try {
-      const savedTrip = localStorage.getItem("currentTrip")
-      const savedTripStatus = localStorage.getItem("currentTripStatus")
+    if (!mockMode) return
 
-      if (savedTrip && savedTripStatus) {
-        setTrip(JSON.parse(savedTrip))
-        setTripStatus(savedTripStatus)
-      }
-    } catch (error) {
-      console.error("Error restoring trip state:", error)
+    // If driver is online and waiting, simulate a new order after a delay
+    if (driverStatus === "online" && tripStatus === "waiting" && !newOrder) {
+      const timer = setTimeout(() => {
+        setNewOrder(mockTrip)
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [driverStatus, tripStatus, newOrder, mockMode])
+
+  // Check for authentication when component mounts
+  useEffect(() => {
+    const driverAuthToken = localStorage.getItem("driverAuthToken")
+    const userType = localStorage.getItem("userType")
+
+    if (!driverAuthToken || userType !== "driver") {
+      // In a real app, you might want to redirect to login
+      console.warn("Driver not authenticated or wrong user type")
+      setIssues((prev) => [...prev, "Authentication warning: Please login again if you encounter issues"])
     }
   }, [])
-
-  // Save trip state to localStorage when it changes
-  useEffect(() => {
-    if (trip) {
-      localStorage.setItem("currentTrip", JSON.stringify(trip))
-      localStorage.setItem("currentTripStatus", tripStatus)
-    } else {
-      localStorage.removeItem("currentTrip")
-      localStorage.removeItem("currentTripStatus")
-    }
-  }, [trip, tripStatus])
 
   const toggleDriverStatus = () => {
     const newStatus = driverStatus === "offline" ? "online" : "offline"
@@ -426,7 +347,7 @@ const DriverApp = () => {
 
     // Emit status change to server
     socket.emit("driverStatusUpdate", {
-      driverId: "D001",
+      driverId,
       status: newStatus,
     })
   }
@@ -437,10 +358,18 @@ const DriverApp = () => {
     try {
       console.log("Accepting order:", newOrder.id)
 
-      // Update the order status using the order service API
-      // This will automatically handle token acquisition through the API service
-      await orderService.updateOrderStatus(newOrder.id, "AWAITING PICKUP")
-      console.log("Order status updated successfully in order service")
+      // Map internal status to API status
+      const apiStatus = "AWAITING PICKUP"
+
+      // Calculate estimated arrival time
+      const estimatedArrival = calculateEstimatedArrival(apiStatus, newOrder)
+
+      // Update order status and send notification
+      await orderService.updateOrderStatus(newOrder.id, apiStatus, driverId, newOrder.customerId, {
+        estimatedArrival,
+      })
+
+      console.log("Order status updated and notification sent")
 
       // Update local state
       setTrip(newOrder)
@@ -450,7 +379,7 @@ const DriverApp = () => {
       // Emit trip acceptance to socket for real-time updates
       socket.emit("tripAccepted", {
         tripId: newOrder.id,
-        driverId: "D001",
+        driverId,
       })
     } catch (error) {
       console.error("Error updating order status:", error)
@@ -464,113 +393,108 @@ const DriverApp = () => {
       // Emit trip acceptance to socket for real-time updates
       socket.emit("tripAccepted", {
         tripId: newOrder.id,
-        driverId: "D001",
+        driverId,
       })
     }
   }
 
-  const rejectOrder = () => {
+  const rejectOrder = async () => {
     if (!newOrder) return
+
+    try {
+      // Update order status to CANCELLED
+      await orderService.updateOrderStatus(newOrder.id, "CANCELLED", driverId, newOrder.customerId, {
+        message: "Driver is not available at the moment.",
+      })
+
+      console.log("Order cancelled and notification sent")
+    } catch (error) {
+      console.error("Error cancelling order:", error)
+      setIssues((prev) => [...prev, `Error cancelling order: ${error.message || "Unknown error"}`])
+    }
 
     setNewOrder(null)
 
     // Emit trip rejection to server
     socket.emit("tripRejected", {
       tripId: newOrder.id,
-      driverId: "D001",
+      driverId,
     })
   }
 
-  // Modify the acceptTripRequest function to properly handle location data
-  const acceptTripRequest = (request) => {
-    console.log("Accepting trip request:", request)
-
-    // Make sure we have valid location objects with proper coordinates
-    const pickupLocation = {
-      lat: request.pickupLocation?.lat || 44.643,
-      lng: request.pickupLocation?.lng || -63.5793,
-      address: request.from || "Unknown pickup location",
-    }
-
-    const dropoffLocation = {
-      lat: request.dropoffLocation?.lat || 44.6418,
-      lng: request.dropoffLocation?.lng || -63.5784,
-      address: request.to || "Unknown dropoff location",
-    }
-
-    console.log("Using pickup location:", pickupLocation)
-    console.log("Using dropoff location:", dropoffLocation)
-
-    // Emit acceptance to server with properly formatted location data
-    socket.emit("acceptOrderFromNotification", {
-      orderId: request.orderId,
-      userId: request.userId,
-      from_address: request.from,
-      to_address: request.to,
-      amount: request.price,
-      driverId: "D001",
-      pickupLocation: pickupLocation,
-      dropoffLocation: dropoffLocation,
-    })
-
-    // Remove from trip requests
-    setTripRequests((prev) => prev.filter((req) => req.id !== request.id))
-  }
-
-  const rejectTripRequest = (requestId) => {
-    console.log("Rejecting trip request:", requestId)
-
-    // Remove from trip requests
-    setTripRequests((prev) => prev.filter((req) => req.id !== requestId))
-  }
-
-  const updateTripStatus = (newStatus) => {
+  const updateTripStatus = async (newStatus) => {
     console.log("Driver updating trip status to:", newStatus)
-    setTripStatus(newStatus)
 
-    // Emit status update to server
-    socket.emit("tripStatusUpdate", {
-      tripId: trip?.id,
-      status: newStatus,
-    })
+    if (!trip) return
 
-    if (newStatus === "completed") {
-      // Reset after a delay
-      setTimeout(() => {
-        setTripStatus("waiting")
-        setTrip(null)
-      }, 5000)
+    try {
+      // Map internal status to API status
+      const apiStatus = STATUS_MAPPING[newStatus] || newStatus.toUpperCase()
+
+      // Calculate estimated arrival time
+      const estimatedArrival = calculateEstimatedArrival(apiStatus, trip)
+
+      // Update order status and send notification
+      await orderService.updateOrderStatus(trip.id, apiStatus, driverId, trip.customerId, {
+        estimatedArrival,
+      })
+
+      console.log("Order status updated and notification sent")
+
+      // Update local state
+      setTripStatus(newStatus)
+
+      // Emit status update to socket for real-time updates
+      socket.emit("tripStatusUpdate", {
+        tripId: trip.id,
+        status: newStatus,
+      })
+
+      if (newStatus === "completed") {
+        // Reset after a delay
+        setTimeout(() => {
+          setTripStatus("waiting")
+          setTrip(null)
+        }, 5000)
+      }
+    } catch (error) {
+      console.error("Error updating order status:", error)
+      setIssues((prev) => [...prev, `Error updating order status: ${error.message || "Unknown error"}`])
+
+      // Continue with local updates even if API fails
+      setTripStatus(newStatus)
+
+      // Emit status update to socket
+      socket.emit("tripStatusUpdate", {
+        tripId: trip.id,
+        status: newStatus,
+      })
+
+      if (newStatus === "completed") {
+        // Reset after a delay
+        setTimeout(() => {
+          setTripStatus("waiting")
+          setTrip(null)
+        }, 5000)
+      }
     }
+  }
+
+  const toggleMockMode = () => {
+    setMockMode(!mockMode)
   }
 
   const clearIssues = () => {
     setIssues([])
   }
 
-  const toggleNotifications = () => {
-    setShowNotifications(!showNotifications)
-  }
-
-  const markNotificationAsRead = (notificationId) => {
-    setNotifications((prev) =>
-      prev.map((notification) => (notification.id === notificationId ? { ...notification, read: true } : notification)),
-    )
-  }
-
-  const clearAllNotifications = () => {
-    setNotifications([])
-  }
-
-  // Count unread notifications
-  const unreadCount = notifications.filter((n) => !n.read).length
-
   return (
     <div className="driver-app">
       <DriverHeader
         title="Driver Dashboard"
         tripStatus={tripStatus}
-        unreadNotifications={unreadCount}
-        toggleNotifications={toggleNotifications}
+        mockMode={mockMode}
+        toggleMockMode={toggleMockMode}
       />
 
       <div className="driver-content">
@@ -582,23 +506,18 @@ const DriverApp = () => {
 
           <DriverStatus status={driverStatus} toggleStatus={toggleDriverStatus} />
 
-          {tripStatus === "waiting" && !newOrder && tripRequests.length === 0 && driverStatus === "online" && (
+          {tripStatus === "waiting" && !newOrder && driverStatus === "online" && (
             <div className="waiting-message">
               <h2>No active trip</h2>
               <p>Waiting for new orders...</p>
             </div>
           )}
 
-          {tripStatus === "waiting" && !newOrder && tripRequests.length === 0 && driverStatus === "offline" && (
+          {tripStatus === "waiting" && !newOrder && driverStatus === "offline" && (
             <div className="waiting-message">
               <h2>No active trip</h2>
               <p>Go online to receive orders</p>
             </div>
-          )}
-
-          {/* Show trip requests if available */}
-          {tripStatus === "waiting" && !newOrder && tripRequests.length > 0 && driverStatus === "online" && (
-            <TripRequestsList requests={tripRequests} onAccept={acceptTripRequest} onReject={rejectTripRequest} />
           )}
 
           {newOrder && (
@@ -616,8 +535,19 @@ const DriverApp = () => {
             pickupLocation={trip?.pickupLocation}
             dropoffLocation={trip?.dropoffLocation}
             tripStatus={tripStatus}
-            isLoading={isLoadingLocation}
+            mockMode={mockMode}
           />
+
+          {mockMode && (
+            <div className="mock-mode-banner">
+              <AlertCircle size={16} />
+              <span>Mock Mode Active</span>
+              <p>
+                Using mock socket for development. Location updates and status changes will be logged but not sent to a
+                server.
+              </p>
+            </div>
+          )}
 
           {issues.length > 0 && (
             <div className="issues-panel">
@@ -628,27 +558,16 @@ const DriverApp = () => {
                 <button onClick={clearIssues}>×</button>
               </div>
               <div className="issues-content">
-                {issues.slice(0, 3).map((issue, index) => (
+                {issues.map((issue, index) => (
                   <div key={index} className="issue-item">
                     {issue}
                   </div>
                 ))}
-                {issues.length > 3 && <div className="issue-item">...and {issues.length - 3} more issues</div>}
               </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* Notification Center */}
-      {showNotifications && (
-        <NotificationCenter
-          notifications={notifications}
-          onClose={() => setShowNotifications(false)}
-          onMarkAsRead={markNotificationAsRead}
-          onClearAll={clearAllNotifications}
-        />
-      )}
     </div>
   )
 }
