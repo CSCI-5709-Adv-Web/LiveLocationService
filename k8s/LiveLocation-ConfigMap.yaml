@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: live-location-service-configmap
+  labels:
+    app: live-location-service-configmap
+data:
+  PORT: "5006"
+  USE_KAFKA: "true"
+  KAFKA_BROKER: "localhost:9092"
+  KAFKA_BROKERS: "localhost:9092"
+  KAFKA_CLIENT_ID: "location-tracking-service"

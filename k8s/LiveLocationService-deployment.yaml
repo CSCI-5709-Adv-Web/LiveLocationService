@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: live-location-api
+  labels:
+    app: live-location-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: live-location-api
+  template:
+    metadata:
+      labels:
+        app: live-location-api
+    spec:
+      containers:
+        - name: live-location-service-container
+          image: jashpatel1511/web-live-location-service:latest
+          ports:
+            - containerPort: 5001
+              name: http
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          env:
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: live-location-service-configmap
+                  key: PORT
+            - name: USE_KAFKA
+              valueFrom:
+                configMapKeyRef:
+                  name: live-location-service-configmap
+                  key: USE_KAFKA
+            - name: KAFKA_BROKER
+              valueFrom:
+                configMapKeyRef:
+                  name: live-location-service-configmap
+                  key: KAFKA_BROKER
+            - name: KAFKA_BROKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: live-location-service-configmap
+                  key: KAFKA_BROKERS
+            - name: KAFKA_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: live-location-service-configmap
+                  key: KAFKA_CLIENT_ID
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: live-location-service-secret
+                  key: MONGODB_URI
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+        - name: live-location-frontend
+          image: jashpatel1511/web-live-location-frontend:latest
+          ports:
+            - containerPort: 5011
+              name: frontend
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          env:
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: live-location-frontend-configmap
+                  key: PORT
+            - name: PORREACT_APP_SOCKET_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: live-location-frontend-configmap
+                  key: REACT_APP_SOCKET_URL
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: live-location-frontend-configmap
+                  key: NODE_ENV
+            - name: REACT_APP_GOOGLE_MAPS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: live-location-frontend-secret
+                  key: REACT_APP_GOOGLE_MAPS_API_KEY
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: live-location-service
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  selector:
+    app: live-location-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5001
+      name: http
+    - protocol: TCP
+      port: 81
+      targetPort: 5011
+      name: frontend
+  type: LoadBalancer
