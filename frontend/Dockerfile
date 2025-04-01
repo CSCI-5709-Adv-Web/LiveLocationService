@@ -8,7 +8,6 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install project dependencies
-RUN npm install -g serve
 RUN npm install
 
 # Copy the rest of the application code
@@ -16,6 +15,7 @@ COPY . .
 
 # Build the React app
 RUN npm run build
+RUN npm install -g serve
 
 # Expose the port the app will run on
 EXPOSE 3000
