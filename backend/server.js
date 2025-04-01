@@ -32,7 +32,7 @@ app.use(express.urlencoded({ extended: true }))
 // Routes
 app.use("/api/trips", tripRoutes)
 
-// Socket.io setup with CORS configuration
+// Update the Socket.io setup with path configuration
 const io = new Server(server, {
   cors: {
     origin: process.env.SOCKET_CORS_ORIGIN || "*", // Use environment variable or allow all origins
@@ -40,6 +40,7 @@ const io = new Server(server, {
     credentials: false, // Changed to false for simpler CORS handling
     allowedHeaders: ["*"],
   },
+  path: "/tracking-api/socket.io", // Add this line to handle the path prefix
   pingTimeout: 60000, // Increase ping timeout
   pingInterval: 25000, // Increase ping interval
   transports: ["websocket", "polling"], // Support both transport methods
