@@ -18,15 +18,15 @@ spec:
         - name: live-location-service-container
           image: jashpatel1511/web-live-location-service:latest
           ports:
-            - containerPort: 5001
+            - containerPort: 5006
               name: http
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "100m"
-            limits:
-              memory: "512Mi"
+              memory: "1Gi"
               cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
           env:
             - name: PORT
               valueFrom:
@@ -70,40 +70,6 @@ spec:
           #     port: http
           #   initialDelaySeconds: 15
           #   periodSeconds: 20
-        - name: live-location-frontend
-          image: jashpatel1511/web-live-location-frontend:latest
-          ports:
-            - containerPort: 5011
-              name: frontend
-          resources:
-            requests:
-              memory: "256Mi"
-              cpu: "100m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
-          env:
-            - name: PORT
-              valueFrom:
-                configMapKeyRef:
-                  name: live-location-frontend-configmap
-                  key: PORT
-            - name: REACT_APP_SOCKET_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: live-location-frontend-configmap
-                  key: REACT_APP_SOCKET_URL
-            - name: NODE_ENV
-              valueFrom:
-                configMapKeyRef:
-                  name: live-location-frontend-configmap
-                  key: NODE_ENV
-            - name: REACT_APP_GOOGLE_MAPS_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: live-location-frontend-secret
-                  key: REACT_APP_GOOGLE_MAPS_API_KEY
-
 ---
 apiVersion: v1
 kind: Service
@@ -118,10 +84,6 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 5001
+      targetPort: 5006
       name: http
-    - protocol: TCP
-      port: 81
-      targetPort: 5011
-      name: frontend
   type: LoadBalancer

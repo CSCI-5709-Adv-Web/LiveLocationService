@@ -66,7 +66,8 @@ jobs:
       - name: Apply Kubernetes Resources
         run: |
           kubectl apply -f k8s/LiveLocation-ConfigMap.yaml
-          kubectl apply -f k8s/LiveLocationFrontend-ConfigMap.yaml
           kubectl apply -f k8s/LiveLocation-secret.yaml
-          kubectl apply -f k8s/LiveLocationFrontend-secret.yaml
           kubectl apply -f k8s/LiveLocationService-deployment.yaml
+          kubectl apply -f k8s/LiveLocationFrontend-ConfigMap.yaml
+          kubectl apply -f k8s/LiveLocationFrontend-secret.yaml
+          kubectl apply -f k8s/LiveLocationFrontend-deployment.yaml
