@@ -16,7 +16,7 @@ import { Link } from "react-router-dom"
 // Use the port from environment variable or default to 5000
 const PORT = process.env.PORT || 5000
 // Use the socket URL from environment variable or default to localhost
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || `http://localhost:${PORT}`
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || `http://k8s-default-liveapig-f10a6b9e65-336617037.us-east-1.elb.amazonaws.com/api`
 
 console.log(`Connecting to Socket.io server at: ${SOCKET_URL}`)
 const socket = io(SOCKET_URL, {

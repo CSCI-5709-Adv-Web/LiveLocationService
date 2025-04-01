@@ -7,8 +7,8 @@ metadata:
 data:
   PORT: "3000"
   # Update these URLs to use the new Ingress address
-  REACT_APP_SOCKET_URL: "http://k8s-default-liveloca-cf415ea493-1188327969.us-east-1.elb.amazonaws.com/"
-  REACT_APP_API_URL: "http://k8s-default-liveloca-cf415ea493-1188327969.us-east-1.elb.amazonaws.com/api"
+  REACT_APP_SOCKET_URL: "http://k8s-default-liveapig-f10a6b9e65-336617037.us-east-1.elb.amazonaws.com/"
+  REACT_APP_API_URL: "http://k8s-default-liveapig-f10a6b9e65-336617037.us-east-1.elb.amazonaws.com/api"
   NODE_ENV: "development"
   # REACT_APP_IDENTITY_SERVER_URL: "123"
 
