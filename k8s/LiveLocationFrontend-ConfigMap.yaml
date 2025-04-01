@@ -5,7 +5,7 @@ metadata:
   labels:
     app: live-location-frontend-configmap
 data:
-  PORT: "5011"
+  PORT: "3000"
   REACT_APP_SOCKET_URL: "http://live-location-service:80/"
   REACT_APP_API_URL: "http://live-location-service:80/"
   NODE_ENV: "development"
