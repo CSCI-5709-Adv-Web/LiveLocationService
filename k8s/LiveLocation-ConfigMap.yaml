@@ -7,6 +7,6 @@ metadata:
 data:
   PORT: "5006"
   USE_KAFKA: "true"
-  KAFKA_BROKER: "localhost:9092"
-  KAFKA_BROKERS: "localhost:9092"
+  KAFKA_BROKER: "kafka-service:9092"
+  KAFKA_BROKERS: "kafka-service:9092"
   KAFKA_CLIENT_ID: "location-tracking-service"
