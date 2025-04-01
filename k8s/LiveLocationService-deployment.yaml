@@ -58,18 +58,18 @@ spec:
                 secretKeyRef:
                   name: live-location-service-secret
                   key: MONGODB_URI
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 10
-            periodSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 15
-            periodSeconds: 20
+          # readinessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: http
+          #   initialDelaySeconds: 10
+          #   periodSeconds: 5
+          # livenessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: http
+          #   initialDelaySeconds: 15
+          #   periodSeconds: 20
         - name: live-location-frontend
           image: jashpatel1511/web-live-location-frontend:latest
           ports:
