@@ -22,10 +22,10 @@ spec:
               name: http
           resources:
             requests:
-              memory: "128Mi"
+              memory: "256Mi"
               cpu: "100m"
             limits:
-              memory: "256Mi"
+              memory: "512Mi"
               cpu: "500m"
           env:
             - name: PORT
@@ -77,10 +77,10 @@ spec:
               name: frontend
           resources:
             requests:
-              memory: "128Mi"
+              memory: "256Mi"
               cpu: "100m"
             limits:
-              memory: "256Mi"
+              memory: "512Mi"
               cpu: "500m"
           env:
             - name: PORT
@@ -88,7 +88,7 @@ spec:
                 configMapKeyRef:
                   name: live-location-frontend-configmap
                   key: PORT
-            - name: PORREACT_APP_SOCKET_URL
+            - name: REACT_APP_SOCKET_URL
               valueFrom:
                 configMapKeyRef:
                   name: live-location-frontend-configmap
