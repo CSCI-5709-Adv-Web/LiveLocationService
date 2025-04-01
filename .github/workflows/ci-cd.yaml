@@ -7,20 +7,11 @@ on:
     branches: [main, master]
 
 jobs:
-  build-and-push:
+  build-and-push-backend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
-      # Add the step to install Docker Compose
-      - name: Install Docker Compose
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y curl
-          curl -L "https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | jq -r .tag_name)/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-          docker-compose --version # Verify installation
 
       - name: Login to DockerHub
         uses: docker/login-action@v2
@@ -28,13 +19,34 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push using Docker Compose
-        run: |
-          docker-compose -f docker-compose.yml build
-          docker-compose -f docker-compose.yml push
+      - name: Build and push backend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          push: true
+          tags: jashpatel1511/web-live-location-service:latest,jashpatel1511/web-live-location-service:latest
+
+  build-and-push-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          push: true
+          tags: jashpatel1511/web-live-location-frontend:latest,jashpatel1511/web-live-location-frontend:latest
 
   deploy-to-kubernetes:
-    needs: [build-and-push]
+    needs: [build-and-push-backend, build-and-push-frontend]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -54,8 +66,7 @@ jobs:
       - name: Apply Kubernetes Resources
         run: |
           kubectl apply -f k8s/LiveLocation-ConfigMap.yaml
-          kubectl apply -f k8s/LiveLocation-Frontend-ConfigMap.yaml
+          kubectl apply -f k8s/LiveLocationFrontend-ConfigMap.yaml
           kubectl apply -f k8s/LiveLocation-secret.yaml
-          kubectl apply -f k8s/LiveLocation-Frontend-secret.yaml
+          kubectl apply -f k8s/LiveLocationFrontend-secret.yaml
           kubectl apply -f k8s/LiveLocationService-deployment.yaml
-          kubectl apply -f k8s/LiveLocationService-service.yaml
