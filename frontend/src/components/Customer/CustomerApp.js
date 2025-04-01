@@ -18,7 +18,6 @@ const socket = io(SOCKET_URL, {
   timeout: 20000,
   transports: ["websocket", "polling"], // Try websocket first, then fall back to polling
   withCredentials: false, // Disable credentials for simpler CORS handling
-  path: "/tracking-api/socket.io", // Add this line to handle the path prefix
 })
 
 // Add this for debugging socket connection issues

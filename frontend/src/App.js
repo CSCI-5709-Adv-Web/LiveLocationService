@@ -6,7 +6,7 @@ import "./App.css"
 
 function App() {
   return (
-    <Router basename="/tracking">
+    <Router>
       <div className="App">
         <Routes>
           <Route path="/" element={<Login />} />

@@ -25,7 +25,6 @@ const socket = io(SOCKET_URL, {
   reconnectionDelay: 1000,
   timeout: 10000,
   transports: ["websocket", "polling"],
-  path: "/tracking-api/socket.io", // Add this line to handle the path prefix
 })
 
 // Default Halifax location as fallback
