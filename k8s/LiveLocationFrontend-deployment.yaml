@@ -27,6 +27,20 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+          # Add startup probe to give more time for initialization
+          startupProbe:
+            httpGet:
+              path: /health.html
+              port: 3000
+            failureThreshold: 30
+            periodSeconds: 10
+          # Update readiness probe to use the simple health check
+          readinessProbe:
+            httpGet:
+              path: /health.html
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
           env:
             - name: PORT
               valueFrom:
@@ -70,4 +84,5 @@ spec:
       port: 80
       targetPort: 3000
       name: frontend
-  type: LoadBalancer
+  type: ClusterIP
+
