@@ -6,7 +6,7 @@ metadata:
     app: live-location-frontend-configmap
 data:
   PORT: "3000"
-  # Update these URLs to use the new Ingress address
+  # Update these URLs to use the Ingress address with correct paths
   REACT_APP_SOCKET_URL: "http://k8s-default-liveapig-f10a6b9e65-336617037.us-east-1.elb.amazonaws.com/"
   REACT_APP_API_URL: "http://k8s-default-liveapig-f10a6b9e65-336617037.us-east-1.elb.amazonaws.com/api"
   NODE_ENV: "development"

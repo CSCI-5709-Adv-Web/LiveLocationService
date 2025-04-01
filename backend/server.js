@@ -32,8 +32,12 @@ app.use(express.urlencoded({ extended: true }))
 // Routes
 app.use("/api/trips", tripRoutes)
 
+// Update the Socket.io setup with CORS configuration
+// Replace the existing Socket.io initialization code with this:
+
 // Socket.io setup with CORS configuration
 const io = new Server(server, {
+  path: "/socket.io", // Explicitly set path to match Ingress configuration
   cors: {
     origin: process.env.SOCKET_CORS_ORIGIN || "*", // Use environment variable or allow all origins
     methods: ["GET", "POST"],
@@ -45,8 +49,15 @@ const io = new Server(server, {
   transports: ["websocket", "polling"], // Support both transport methods
 })
 
+// Add a health check endpoint for Socket.IO
+app.get("/socket.io/health", (req, res) => {
+  res.status(200).send("Socket.IO server is running")
+})
+
 // Add this for debugging
-console.log(`Socket.io server configured with CORS origin: ${process.env.SOCKET_CORS_ORIGIN || "*"}`)
+console.log(
+  `Socket.io server configured with path: /socket.io and CORS origin: ${process.env.SOCKET_CORS_ORIGIN || "*"}`,
+)
 
 // Connect to MongoDB - Fix the database name case sensitivity issue
 const MONGODB_URI =

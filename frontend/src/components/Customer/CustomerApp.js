@@ -8,10 +8,13 @@ import "../../styles/Customer.css"
 
 // Use the port from environment variable or default to 5000
 const PORT = process.env.PORT || 5000
-// Use the socket URL from environment variable or default to localhost
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || `http://k8s-default-liveapig-f10a6b9e65-336617037.us-east-1.elb.amazonaws.com/api`
+// Use the socket URL from environment variable or default to the Ingress URL
+const SOCKET_URL =
+  process.env.REACT_APP_SOCKET_URL || `http://k8s-default-liveapig-f10a6b9e65-336617037.us-east-1.elb.amazonaws.com/`
+
 // Create socket outside component to prevent recreation on re-renders
 const socket = io(SOCKET_URL, {
+  path: "/socket.io", // Explicitly set the socket.io path to match Ingress
   reconnection: true,
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
@@ -21,7 +24,7 @@ const socket = io(SOCKET_URL, {
 })
 
 // Add this for debugging socket connection issues
-console.log(`Attempting to connect to Socket.io server at: ${SOCKET_URL}`)
+console.log(`Attempting to connect to Socket.io server at: ${SOCKET_URL} with path: /socket.io`)
 
 const CustomerApp = () => {
   // Initialize with a default driver location in Halifax
