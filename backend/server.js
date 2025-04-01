@@ -24,13 +24,24 @@ const server = http.createServer(app)
 // Get port from environment variable or use default
 const PORT = process.env.PORT || 5000
 
-// Middleware
-app.use(cors())
+// Update CORS configuration to accept requests from the new origin
+app.use(
+  cors({
+    origin: process.env.SOCKET_CORS_ORIGIN || "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    credentials: false,
+  }),
+)
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
 // Routes
 app.use("/api/trips", tripRoutes)
+
+// Add a health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() })
+})
 
 // Update the Socket.io setup with path configuration
 const io = new Server(server, {
@@ -40,7 +51,7 @@ const io = new Server(server, {
     credentials: false, // Changed to false for simpler CORS handling
     allowedHeaders: ["*"],
   },
-  path: "/tracking-api/socket.io", // Add this line to handle the path prefix
+  path: "/socket.io", // Change this line to handle requests without the path prefix
   pingTimeout: 60000, // Increase ping timeout
   pingInterval: 25000, // Increase ping interval
   transports: ["websocket", "polling"], // Support both transport methods

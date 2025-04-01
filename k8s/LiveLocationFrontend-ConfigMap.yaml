@@ -6,8 +6,8 @@ metadata:
     app: live-location-frontend-configmap
 data:
   PORT: "3000"
-  REACT_APP_SOCKET_URL: "http://k8s-default-apigatew-d3ee00e709-426448993.us-east-1.elb.amazonaws.com/tracking-api"
-  REACT_APP_API_URL: "http://k8s-default-apigatew-d3ee00e709-426448993.us-east-1.elb.amazonaws.com/tracking-api"
+  REACT_APP_SOCKET_URL: "http://k8s-livelocationgroup-9a27bc2f17-848505292.us-east-1.elb.amazonaws.com/tracking-api"
+  REACT_APP_API_URL: "http://k8s-livelocationgroup-9a27bc2f17-848505292.us-east-1.elb.amazonaws.com/tracking-api"
   NODE_ENV: "development"
   # REACT_APP_IDENTITY_SERVER_URL: "123"
 
